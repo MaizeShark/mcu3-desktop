@@ -1,0 +1,149 @@
+#!/bin/bash
+# Run the Tesla Model 3 MCU UI (QtCar, firmware 2019.20.4.2) on this PC. ./tesla help
+set -u
+CALLER_PWD=$PWD
+cd "$(dirname "$(realpath "$0")")" || exit 1
+. tools/common.sh
+. tools/check.sh
+
+usage() {
+    cat <<EOF
+${B}./tesla$R0 COMMAND [options]
+
+  start [options]    start QtCar with everything enabled in tesla.conf / the options
+                     (./tesla start --help lists them)
+  stop               stop a running start from anywhere, and clean up what an earlier run left
+  status             what runs now: services, helpers, mounts, ports
+  check              check the host, the image and the enabled features (nothing is changed)
+  logs [RUN]         summary of the last run's logs (or RUN: a folder in logs/), for problem
+                     reports; logs --list shows the runs
+  config             the settings a start would use and where each comes from
+  services           the firmware services that can be started (--services / SERVICES=)
+  build-image [...]  create or update the patched image (patch kit + maps); build-image --help
+
+Settings: tesla.conf (created from tesla.conf.example on the first start). Environment variables
+of the same names (AUDIO=1 ./tesla start) override it, command line options override both.
+EOF
+}
+
+# --config FILE, before anything reads the settings
+CONFIG_ARG=""
+prev=""
+for a in "$@"; do
+    [ "$prev" = --config ] && CONFIG_ARG=$(abspath "$a" "$CALLER_PWD")
+    case "$a" in --config=*) CONFIG_ARG=$(abspath "${a#--config=}" "$CALLER_PWD") ;; esac
+    prev=$a
+done
+[ -z "$CONFIG_ARG" ] || [ -f "$CONFIG_ARG" ] || die "no config file $CONFIG_ARG"
+
+cmd_stop() {
+    local pid="" dir left="" forced=0
+    if pid=$(running_pid); then
+        dir=$(realpath "$LOGS/current")
+        say "Stopping the running instance (pid $pid, logs ${dir#"$TESLA_DIR/"})..."
+        kill -TERM "$pid"
+        for _ in $(seq 60); do [ -d "/proc/$pid" ] || break; sleep 0.5; done
+        if [ -d "/proc/$pid" ]; then
+            warn "it didn't stop within 30 s; cleaning up here"
+            kill -KILL "$pid" 2>/dev/null
+            forced=1
+        else
+            say "Stopped."
+        fi
+    fi
+    # whatever is left: from a run that was killed, or a terminal that was closed
+    dir=$(realpath "$LOGS/latest" 2>/dev/null)
+    [ -d "$dir" ] || dir=/nonexistent
+    chroot_procs_maybe && left="$left processes"
+    [ -n "$(helper_pids "$dir/pids")" ] && left="$left helpers"
+    [ -n "$(mounts_below)" ] && left="$left mounts"
+    if [ -n "$left" ] || [ "$forced" = 1 ]; then
+        sudo -v || exit 1
+        say "Cleaning up what's left of an earlier run (${left# }):"
+        teardown "$dir"
+    fi
+    if [ -z "$left$pid" ]; then
+        say "Nothing was running."
+    fi
+    if src=$(image_mounted); then
+        say "The image is still mounted at $CHROOT ($src), it was mounted before the start. To unmount: sudo umount $CHROOT"
+    fi
+    local other
+    for other in $(image_mounted_elsewhere); do
+        say "The image is also mounted at $other. To unmount: sudo umount $other"
+    done
+    if podman ps -q 2>/dev/null | grep -q .; then
+        say "Podman containers are running (the sandbox?): podman ps; podman kill <id>"
+    fi
+    return 0
+}
+
+cmd_status() {
+    local pid dir
+    if pid=$(running_pid); then
+        dir=$(realpath "$LOGS/current")
+        local t0
+        t0=$(head -1 "$dir/events.log" 2>/dev/null | cut -d' ' -f1)
+        say "${B}Running$R0 since $(date -d "@${t0:-0}" '+%F %T') (pid $pid), logs ${dir#"$TESLA_DIR/"}/"
+        say "  VNC       localhost:$(sed -n 's/^VNC_PORT=//p' "$dir/state")"
+        grep -q '^VEHICLE=1' "$dir/state" && say "  Panel     http://localhost:$(sed -n 's/^PANEL_PORT=//p' "$dir/state")/"
+        python3 tools/logsummary.py --status "$dir"
+    else
+        say "Not running."
+        [ -n "$(mounts_below)" ] && say "  Mounts left in $CHROOT from an earlier run: ./tesla stop"
+        pgrep -x QtCar >/dev/null && say "  A QtCar process runs (an earlier run? the sandbox?): ./tesla stop, podman ps"
+        [ -L "$LOGS/latest" ] && say "  Last run: logs/$(readlink "$LOGS/latest")/ (./tesla logs)"
+    fi
+    if src=$(image_mounted); then say "Image: $src mounted at $CHROOT"; else say "Image: not mounted"; fi
+    podman ps -q 2>/dev/null | grep -q . && say "Podman containers are running (sandbox?): podman ps"
+    return 0
+}
+
+cmd_config() {
+    local v
+    say "Settings from: defaults < ${CONF_FILE#"$TESLA_DIR/"}$( [ -f "$CONF_FILE" ] || echo ' (missing)') < environment < command line"
+    for v in "${CONF_VARS[@]}"; do
+        printf '  %-20s %-40s %s\n' "$v" "${!v:-\"\"}" "${DIM}${CONF_SRC[$v]}$R0"
+    done
+}
+
+cmd_services() {
+    local vars
+    vars=$(image_file etc/RunQtCar.vars)
+    [ -n "$vars" ] || die "can't read the image ($IMAGE)"
+    say "Firmware services (./tesla start --services \"A B\" or SERVICES= in tesla.conf):"
+    { sed -n 's/^\([a-z0-9-]*\))$/\1/p' <<<"$vars"; printf '%s\n' valhalla qtcar-sim audioweaver audiod; } |
+        sort -u | column -c 100 | sed 's/^/  /'
+    say "Started by the features: nav: valhalla qtcar-tmserver; vehicle: qtcar-sim qtcar-vehicle;"
+    say "  gps: qtcar-gpsmanager; audio: audioweaver audiod qtcar-audiod qtcar-mediaserver; music: qtcar-mediaserver"
+}
+
+cmd=${1:-help}
+[ $# -gt 0 ] && shift
+case "$cmd" in
+    start)
+        CREATE_CONF=1 load_config "$CONFIG_ARG"
+        . tools/start.sh
+        cmd_start "$@" ;;
+    stop) load_config "$CONFIG_ARG"; cmd_stop ;;
+    status) load_config "$CONFIG_ARG"; cmd_status ;;
+    check)
+        load_config "$CONFIG_ARG"
+        . tools/start.sh
+        parse_start_opts "$@"
+        run_checks all
+        echo
+        if [ "$CHECK_FAIL" -gt 0 ]; then say "${RED}$CHECK_FAIL failed$R0, $CHECK_WARN warnings"; exit 1
+        elif [ "$CHECK_WARN" -gt 0 ]; then say "${YEL}$CHECK_WARN warnings$R0, nothing failed"
+        else say "${GRN}All ok.$R0"; fi ;;
+    logs) exec python3 tools/logsummary.py "$@" ;;
+    config)
+        load_config "$CONFIG_ARG"
+        . tools/start.sh
+        parse_start_opts "$@"
+        cmd_config ;;
+    services) load_config "$CONFIG_ARG"; cmd_services ;;
+    build-image) load_config "$CONFIG_ARG"; . tools/build-image.sh; cmd_build_image "$@" ;;
+    help|-h|--help) usage ;;
+    *) usage >&2; die "unknown command: $cmd" ;;
+esac

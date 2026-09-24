@@ -1,0 +1,109 @@
+# Download sources for the files in payload/.
+# All from Ubuntu 16.04 (xenial), found 2026-09-23; each extracted file verified against its hash.
+#
+# mcu3_patch.py uses payload/<path> if it's there. If not, it downloads it from the url below.
+# Fill in per file:
+#   url     direct link to the file, or to a package/archive containing it
+#           (.deb, .tar.gz, .tar.xz, .tar.bz2, .tar.zst, .zip)
+#   sha256  sha256 of what `url` downloads (run `sha256sum` on it). If left empty the script
+#           prints it, so you can paste it here afterwards.
+#   member  only for packages/archives: path of the file inside, e.g.
+#           "usr/lib/x86_64-linux-gnu/dri/swrast_dri.so" (leading "./" optional,
+#           symlinks inside the package are followed)
+#
+# Several entries may use the same url; each package is downloaded once (cached in downloads/).
+# Whatever gets extracted is always checked against the exact hash in mcu3_patch.py, so a
+# wrong package version is caught.
+#
+# icu_preload.so and the fake chrome-sandbox need no entry: they are compiled from src/.
+#
+# Example:
+# ["usr/lib/libexample.so.1.2.3"]
+# url    = "https://example.org/pool/libexample1_1.2.3-1_amd64.deb"
+# sha256 = "3f2a...e91c"
+# member = "usr/lib/x86_64-linux-gnu/libexample.so.1.2.3"
+
+["usr/lib/dri/swrast_dri.so"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/m/mesa/libgl1-mesa-dri_18.0.5-0ubuntu0~16.04.1_amd64.deb"
+sha256 = "db9064a801d63088db1ef9eacaf90c555c3efaa5f319ffd1d51330033c7026c4"
+member = "usr/lib/x86_64-linux-gnu/dri/r300_dri.so"
+
+["usr/lib/libglapi.so.0.0.0"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/m/mesa/libglapi-mesa_18.0.5-0ubuntu0~16.04.1_amd64.deb"
+sha256 = "bb306e135f9e5efc3ef6f18bbacfe93265bc40c9f724104d276cd465aa13b7d7"
+member = "usr/lib/x86_64-linux-gnu/libglapi.so.0.0.0"
+
+["usr/lib/libdrm.so.2.4.0"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/libd/libdrm/libdrm2_2.4.91-2~16.04.1_amd64.deb"
+sha256 = "7c67e41337ee417fcc1e94c5e284edfa14233a5a70e8bea7b21fe391bf069b06"
+member = "usr/lib/x86_64-linux-gnu/libdrm.so.2.4.0"
+
+["usr/lib/libdrm_intel.so.1.0.0"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/libd/libdrm/libdrm-intel1_2.4.91-2~16.04.1_amd64.deb"
+sha256 = "3f01d69fe6a4adfbb08e99256596fbf62726b601b003bfb8dac49448994f19d1"
+member = "usr/lib/x86_64-linux-gnu/libdrm_intel.so.1.0.0"
+
+["usr/lib/libdrm_amdgpu.so.1.0.0"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/libd/libdrm/libdrm-amdgpu1_2.4.91-2~16.04.1_amd64.deb"
+sha256 = "123625aebfdad114b9e7a485c0f793e0110f9f7d33909ac2b427394e4a36f24c"
+member = "usr/lib/x86_64-linux-gnu/libdrm_amdgpu.so.1.0.0"
+
+["usr/lib/libdrm_nouveau.so.2.0.0"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/libd/libdrm/libdrm-nouveau2_2.4.91-2~16.04.1_amd64.deb"
+sha256 = "7418c7c900217d74d652784ac5f942182bf3b7e3c624c5705cf6bb940333d2b5"
+member = "usr/lib/x86_64-linux-gnu/libdrm_nouveau.so.2.0.0"
+
+["usr/lib/libdrm_radeon.so.1.0.1"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/libd/libdrm/libdrm-radeon1_2.4.91-2~16.04.1_amd64.deb"
+sha256 = "a762fb8c9a1dc751ebd4adb9c9155150101757bf3f8e15f43eaccf30752ced46"
+member = "usr/lib/x86_64-linux-gnu/libdrm_radeon.so.1.0.1"
+
+["usr/lib/libffi.so.6.0.4"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/libf/libffi/libffi6_3.2.1-4_amd64.deb"
+sha256 = "c114e92771964761d602b7823399072e05b942144367b3f87cd3ce8f0318c3f0"
+member = "usr/lib/x86_64-linux-gnu/libffi.so.6.0.4"
+
+["usr/lib/libLLVM-6.0.so.1"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/l/llvm-toolchain-6.0/libllvm6.0_6.0-1ubuntu2~16.04.1_amd64.deb"
+sha256 = "f31cb9dbe5bd218e7e1493eefbc6ac061be54c42a0a50bbfeaa3820e892569f6"
+member = "usr/lib/x86_64-linux-gnu/libLLVM-6.0.so.1"
+
+["usr/lib/libLLVM-3.8.so.1"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/l/llvm-toolchain-3.8/libllvm3.8_3.8-2ubuntu1_amd64.deb"
+sha256 = "26d79bcabe3026f2a7b2220f99e7cbbc85513403cd6ce33125d7e599a6ba8003"
+member = "usr/lib/x86_64-linux-gnu/libLLVM-3.8.so.1"
+
+["usr/lib/libbsd.so.0.8.2"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/libb/libbsd/libbsd0_0.8.2-1_amd64.deb"
+sha256 = "996bf53a816e2dcd019e758f5d208360d64f4faf4eda8850dd338b2b90066109"
+member = "lib/x86_64-linux-gnu/libbsd.so.0.8.2"
+
+["usr/lib/libedit.so.2.0.53"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/libe/libedit/libedit2_3.1-20150325-1ubuntu2_amd64.deb"
+sha256 = "37f94bdfdd82537058765b327d461b1cfd50a666cb41f99d6a4da1a85252e0e3"
+member = "usr/lib/x86_64-linux-gnu/libedit.so.2.0.53"
+
+["usr/lib/libelf-0.165.so"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/e/elfutils/libelf1_0.165-3ubuntu1.2_amd64.deb"
+sha256 = "b77d26101dc80d4d556a6ea5e16295ce6bc8f9934179596f270b9e1cd1d4edae"
+member = "usr/lib/x86_64-linux-gnu/libelf-0.165.so"
+
+["usr/lib/libexpatw.so.1.6.0"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/e/expat/libexpat1_2.1.0-7ubuntu0.16.04.5_amd64.deb"
+sha256 = "372465554ac8c8ce1674c97f2029ac90960d2e54cee92b24d91fc846e942a4f2"
+member = "usr/lib/x86_64-linux-gnu/libexpatw.so.1.6.0"
+
+["usr/lib/libsensors.so.4.4.0"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/l/lm-sensors/libsensors4_3.4.0-2_amd64.deb"
+sha256 = "fda2e60b530c6f75f223b8870bc9b9d6954c6faf8d324e67b02215e94ca333ca"
+member = "usr/lib/x86_64-linux-gnu/libsensors.so.4.4.0"
+
+["usr/lib/libtic.so.5.9"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/n/ncurses/libtinfo5_6.0+20160213-1ubuntu1_amd64.deb"
+sha256 = "87911b59dabcc52e2dcad9c01679259ccfa785916aed4b1bbecdd3e699c75fb8"
+member = "usr/lib/x86_64-linux-gnu/libtic.so.5.9"
+
+["usr/lib/libtinfo.so.5.9"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/n/ncurses/libtinfo5_6.0+20160213-1ubuntu1_amd64.deb"
+sha256 = "87911b59dabcc52e2dcad9c01679259ccfa785916aed4b1bbecdd3e699c75fb8"
+member = "lib/x86_64-linux-gnu/libtinfo.so.5.9"

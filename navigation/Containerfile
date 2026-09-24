@@ -1,0 +1,21 @@
+# Valhalla 2.4.3 data tools (valhalla_build_tiles etc.), the version Tesla's valhalla_server in
+# firmware 2019.20.4.2 is based on. Only the tile-building side is built; the server comes
+# from the firmware. Ubuntu 16.04 is what Valhalla 2.4 targeted.
+FROM docker.io/library/ubuntu:16.04
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        autoconf automake make libtool pkg-config g++ gcc git ca-certificates jq \
+        protobuf-compiler vim-common libboost-all-dev libcurl4-openssl-dev libprotobuf-dev \
+        libgeos-dev libgeos++-dev liblua5.2-dev libspatialite-dev libsqlite3-dev lua5.2 \
+        libsqlite3-mod-spatialite python \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --branch 2.4.3 --recurse-submodules https://github.com/valhalla/valhalla.git /src
+WORKDIR /src
+RUN ./autogen.sh \
+    && ./configure --enable-services=no --enable-python-bindings=no \
+    && make -j"$(nproc)" \
+    && make install \
+    && ldconfig
+
+WORKDIR /data

@@ -1,0 +1,26 @@
+# Whitelist: only the tools are tracked. Firmware dumps, ext4 images, backups and
+# build output in this folder stay local.
+/*
+!/.gitignore
+!/README.md
+!/LICENSE
+!/docs/
+!/CLAUDE.md
+!/start_all.sh
+!/tesla
+!/tesla.conf.example
+!/tools/
+!/sandbox.sh
+!/mcu3-patchkit/
+!/tesla-touch/
+!/notes/
+!/navigation/
+!/vehicle/
+
+/mcu3-patchkit/downloads/
+# downloaded / built by mcu3_patch.py (sources.toml, src/); never commit the libraries
+/mcu3-patchkit/payload/
+__pycache__/
+/tesla-touch/target/
+/navigation/work/
+/vehicle/work/

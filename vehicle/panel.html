@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vehicle Panel</title>
+<style>
+:root {
+  --bg: #f3f3f1; --card: #ffffff; --ink: #1b1c1e; --muted: #6b6e73; --line: #e2e2de;
+  --accent: #3e6ae1; --on: #1f8a4c; --warn: #c7662b; --chip: #ececea;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151618; --card: #1f2023; --ink: #ececea; --muted: #9a9ca1; --line: #2e3034;
+          --accent: #6f93ff; --on: #4cc07e; --warn: #f0935a; --chip: #2a2c30; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+       font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { padding: 16px 16px 4px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 20px; margin: 0; font-weight: 600; }
+#conn { color: var(--muted); font-size: 12px; }
+#conn.bad { color: var(--warn); }
+main { padding: 8px 16px 32px; display: grid; gap: 12px;
+       grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+section.wide { grid-column: 1 / -1; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+     margin: 0 0 10px; font-weight: 600; }
+.row { display: flex; align-items: center; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+.row label { min-width: 92px; color: var(--muted); }
+button { font: inherit; border: 1px solid var(--line); background: var(--chip); color: var(--ink);
+         border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 8px 8px 0; }
+input[type=range] { flex: 1; min-width: 120px; accent-color: var(--accent); }
+.val { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+input[type=text] { font: inherit; flex: 1; min-width: 160px; padding: 6px 8px; border-radius: 8px;
+                   border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+#live { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 16px; }
+#live div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line);
+            padding: 2px 0; min-width: 0; }
+#live span:first-child { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#live span:last-child { font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; min-width: 0; }
+#live div.long { grid-column: span 2; }
+#live .warn { color: var(--warn); font-weight: 600; }
+#live .badge { color: #fff; }
+.tires { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
+.tires .row { flex-wrap: nowrap; }
+.tires .row label { min-width: 24px; }
+.tires input[type=range] { min-width: 0; width: 0; }
+.tires .val { min-width: 36px; }
+#msg { color: var(--muted); font-size: 12px; min-height: 1.4em; }
+.badge { display: none; font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 1px 5px;
+         border-radius: 4px; background: var(--warn); color: #fff; margin-left: 4px; vertical-align: 1px; }
+.badge.show { display: inline-block; }
+.note { display: none; font-size: 12px; color: var(--warn); border-left: 3px solid var(--warn);
+        padding: 4px 8px; margin: 0 0 8px; }
+.note.show { display: block; }
+#services { display: flex; flex-wrap: wrap; gap: 6px; }
+#services a, #logs a { color: var(--ink); text-decoration: none; }
+.svc { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 8px;
+       background: var(--chip); border: 1px solid var(--line); font-size: 13px; }
+.svc:hover { border-color: var(--accent); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--on); flex: none; }
+.svc.down .dot { background: var(--warn); }
+.svc.down { color: var(--warn); }
+.svc small { color: var(--muted); }
+#logs { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; margin-top: 10px; }
+#logs a:hover { color: var(--accent); }
+#logs small { color: var(--muted); }
+#rundir { color: var(--muted); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+#msg.bad { color: var(--warn); }
+</style>
+</head>
+<body>
+<header><h1>Vehicle panel</h1><span id="conn">connecting…</span></header>
+<main>
+  <section class="wide">
+    <h2>What QtCar sees</h2>
+    <div id="live"></div>
+  </section>
+
+  <section class="wide">
+    <h2>Presets</h2>
+    <div class="chips" id="presets"></div>
+  </section>
+
+  <section>
+    <h2>Drive</h2>
+    <div class="note" id="gpsnote">Driven by the GPS (tesla-gps.py --can): the items marked GPS follow
+      the GPS position. A change here holds only until the GPS car starts or stops moving.</div>
+    <div class="row"><label>Drive rail<span class="badge" data-owner="SIM_driveRailOn">GPS</span></label><button data-toggle="SIM_driveRailOn">on</button></div>
+    <div class="row"><label>Gear<span class="badge" data-owner="DI_gear">GPS</span></label>
+      <span class="seg" data-seg="DI_gear"><button>P</button><button>R</button><button>N</button><button>D</button></span></div>
+    <div class="row"><label>Speed<span class="badge" data-owner="DI_uiSpeedHighSpeed">GPS</span></label><input type="range" id="speed" min="0" max="120" value="0">
+      <span class="val" id="speedv">0 mph</span></div>
+    <div class="row"><label>Battery</label><input type="range" data-range="SIM_batteryLevel" min="0" max="100" value="100">
+      <span class="val" data-unit="%"></span></div>
+  </section>
+
+  <section>
+    <h2>Doors and locks</h2>
+    <div class="chips">
+      <button data-toggle="SIM_driverDoor">driver</button>
+      <button data-toggle="SIM_passFrontDoor">passenger</button>
+      <button data-toggle="SIM_driverRearDoor">rear left</button>
+      <button data-toggle="SIM_passRearDoor">rear right</button>
+      <button data-toggle="SIM_frontTrunk">frunk</button>
+      <button data-toggle="SIM_rearTrunk">trunk</button>
+    </div>
+    <div class="row"><label>Locked</label><button data-toggle="SIM_vehicleLockState">locked</button></div>
+  </section>
+
+  <section>
+    <h2>Charging</h2>
+    <div class="row"><label>State</label>
+      <span class="seg"><button data-preset="unplugged">unplugged</button><button data-preset="charging">charging</button><button data-preset="charge-complete">complete</button></span></div>
+    <div class="row"><label>Pack current</label><input type="range" data-range="BMS_packCurrent" min="0" max="250" value="30">
+      <span class="val" data-unit=" A"></span></div>
+    <div class="row"><label>Time to full</label><input type="range" data-range="SIM_chargeTimeToFull" min="0" max="12" step="0.25" value="1.5">
+      <span class="val" data-unit=" h"></span></div>
+  </section>
+
+  <section>
+    <h2>Lights</h2>
+    <div class="chips">
+      <button data-toggle="SIM_headLights">headlights</button>
+      <button data-toggle="SIM_parkingLights">parking</button>
+      <button data-toggle="SIM_highbeamSwitch">high beam</button>
+      <button data-toggle="SIM_frontFogLights">fog</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Signals and more</h2>
+    <div class="chips">
+      <button data-toggle="SIM_signalLeft">◀ left</button>
+      <button data-toggle="SIM_signalRight">right ▶</button>
+      <button data-toggle="SIM_hazardsSwitch">hazards</button>
+    </div>
+    <div class="row"><label>Parking brake</label><button data-toggle="SIM_parkBrakeApplied">applied</button></div>
+    <div class="row"><label>Driver belt</label><button data-toggle="SIM_driverSeatbelt">unbuckled</button></div>
+  </section>
+
+  <section>
+    <h2>Climate</h2>
+    <div class="row"><label>Outside</label><input type="range" data-range="SIM_hvacOutsideTemp" min="-25" max="45" step="0.5" value="22.5">
+      <span class="val" data-unit=" °C"></span></div>
+    <div class="row"><label>Inside</label><input type="range" data-range="SIM_hvacInsideTemp" min="-25" max="60" step="0.5" value="22.5">
+      <span class="val" data-unit=" °C"></span></div>
+  </section>
+
+  <section>
+    <h2>Tire pressure (bar)</h2>
+    <div class="tires">
+      <div class="row"><label>FL</label><input type="range" data-range="SIM_tpmsPressureFL" min="1" max="3.5" step="0.05" value="2.6"><span class="val"></span></div>
+      <div class="row"><label>FR</label><input type="range" data-range="SIM_tpmsPressureFR" min="1" max="3.5" step="0.05" value="2.6"><span class="val"></span></div>
+      <div class="row"><label>RL</label><input type="range" data-range="SIM_tpmsPressureRL" min="1" max="3.5" step="0.05" value="2.6"><span class="val"></span></div>
+      <div class="row"><label>RR</label><input type="range" data-range="SIM_tpmsPressureRR" min="1" max="3.5" step="0.05" value="2.6"><span class="val"></span></div>
+    </div>
+  </section>
+
+  <section class="wide">
+    <h2>Any signal</h2>
+    <div class="row">
+      <input type="text" id="raw" placeholder="DI_gear=R  SIM_hvacFanSpeed=5  (names: tesla-can.py --find)">
+      <button id="rawset">set</button><button id="rawunset">unset</button>
+    </div>
+    <div id="msg"></div>
+  </section>
+
+  <section class="wide" id="run" hidden>
+    <h2>Services <span id="rundir"></span></h2>
+    <div id="services"></div>
+    <div id="logs"></div>
+  </section>
+</main>
+<script>
+const $ = (s, el = document) => el.querySelector(s), $$ = (s, el = document) => [...el.querySelectorAll(s)];
+let values = {}, busy = 0;
+
+function isTrue(v) { return String(v).toLowerCase() === "true" || v === 1 || v === "1"; }
+
+async function post(body) {
+  busy++;
+  try {
+    const r = await fetch("api/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    msg("");
+    render(j);
+  } catch (e) { msg(String(e.message || e), true); }
+  finally { busy--; }
+}
+function set(obj) { return post({ values: obj }); }
+function msg(t, bad) { $("#msg").textContent = t; $("#msg").className = bad ? "bad" : ""; }
+
+// live values that a signal set by the GPS drives
+const LIVE_OWNER = { VAPI_shiftState: "DI_gear", VAPI_vehicleSpeed: "DI_vehicleSpeed", VAPI_odometer: "DI_odometer",
+                     VAPI_driveRailOn: "SIM_driveRailOn" };
+function el(tag, props = {}, ...kids) { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; }
+function size(n) { return n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : n > 1e3 ? Math.round(n / 1e3) + " kB" : n + " B"; }
+
+function renderRun(run) {
+  $("#run").hidden = !run;
+  if (!run) return;
+  if (run.error) { $("#services").textContent = run.error; return; }
+  $("#rundir").textContent = run.dir + "/";
+  const svc = $("#services");
+  svc.innerHTML = "";
+  for (const s of run.services) {
+    const a = el("a", { href: "logs/" + s.log, target: "_blank", className: "svc" + (s.up ? "" : " down"),
+                        title: s.bin + (s.up ? " running" : " not running") + ", log: " + s.log },
+                 el("span", { className: "dot" }), s.name);
+    if (s.restarts) a.append(el("small", {}, "↻" + s.restarts));
+    svc.append(a);
+  }
+  for (const h of run.helpers)
+    svc.append(el("span", { className: "svc" + (h.up ? "" : " down"), title: "host helper" },
+                  el("span", { className: "dot" }), el("small", {}, h.name)));
+  const logs = $("#logs");
+  logs.innerHTML = "";
+  logs.append(el("a", { href: "logs/summary", target: "_blank" }, el("b", {}, "summary")));
+  for (const [name, n] of run.logs)
+    logs.append(el("a", { href: "logs/" + name, target: "_blank" }, name + " ", el("small", {}, size(n))));
+}
+
+function render(s) {
+  values = s.values;
+  const owners = s.owners || {};
+  let gps = false;
+  for (const b of $$("[data-owner]")) {
+    const on = owners[b.dataset.owner] === "gps";
+    b.classList.toggle("show", on);
+    gps = gps || on;
+  }
+  $("#gpsnote").classList.toggle("show", gps);
+  renderRun(s.run);
+  const live = $("#live");
+  live.innerHTML = "";
+  for (const [k, v] of Object.entries(s.live)) {
+    const d = document.createElement("div");
+    const a = document.createElement("span"), b = document.createElement("span");
+    a.textContent = k.replace(/^(VAPI|HVAC|TPMS)_/, ""); a.title = k;
+    if (owners[LIVE_OWNER[k]] === "gps") { a.append(el("span", { className: "badge show", title: "follows the GPS" }, "GPS")); }
+    b.textContent = v === null ? "–" : k === "VAPI_doorState" ? (v === "{  }" ? "all closed" : v.split("|").join(", ")) : v;
+    if (b.textContent.length > 14) d.className = "long";
+    if (/telltale/.test(k) && v && !/^(Off|false|<invalid>)$/.test(v)) b.className = "warn";
+    d.append(a, b); live.append(d);
+  }
+  const pre = $("#presets");
+  if (!pre.children.length) {
+    for (const [name, vals] of Object.entries(s.presets)) {
+      const b = document.createElement("button");
+      b.textContent = name;
+      b.title = Object.entries(vals).map(([k, v]) => k + "=" + v).join("\n");
+      b.onclick = () => post({ preset: name });
+      pre.append(b);
+    }
+  }
+  for (const b of $$("[data-toggle]")) b.classList.toggle("on", isTrue(values[b.dataset.toggle]));
+  for (const seg of $$("[data-seg]")) for (const b of $$("button", seg)) b.classList.toggle("on", values[seg.dataset.seg] === b.textContent);
+  const cs = values.SIM_chargeState;
+  for (const b of $$("[data-preset]"))
+    b.classList.toggle("on", { unplugged: "Disconnected", charging: "Charging", "charge-complete": "Complete" }[b.dataset.preset] === cs);
+  if (!busy) {
+    for (const r of $$("[data-range]")) {
+      const v = values[r.dataset.range];
+      if (v !== undefined && document.activeElement !== r) r.value = v;
+      showRange(r);
+    }
+    if (values.DI_uiSpeedHighSpeed !== undefined && document.activeElement !== $("#speed")) $("#speed").value = values.DI_uiSpeedHighSpeed;
+    $("#speedv").textContent = $("#speed").value + " mph";
+  }
+}
+function showRange(r) { const u = r.nextElementSibling; u.textContent = r.value + (u.dataset.unit || ""); }
+
+for (const b of $$("[data-toggle]")) b.onclick = () => set({ [b.dataset.toggle]: isTrue(values[b.dataset.toggle]) ? "false" : "true" });
+for (const seg of $$("[data-seg]")) for (const b of $$("button", seg)) b.onclick = () => set({ [seg.dataset.seg]: b.textContent });
+for (const b of $$("[data-preset]")) b.onclick = () => post({ preset: b.dataset.preset });
+for (const r of $$("[data-range]")) {
+  r.oninput = () => showRange(r);
+  r.onchange = () => set({ [r.dataset.range]: r.value });
+}
+$("#speed").oninput = () => $("#speedv").textContent = $("#speed").value + " mph";
+$("#speed").onchange = () => {
+  const mph = +$("#speed").value;
+  set({ DI_uiSpeedHighSpeed: mph, DI_vehicleSpeed: +(mph * 1.609344).toFixed(1) });
+};
+function rawPairs() { return $("#raw").value.trim().split(/\s+/).filter(Boolean); }
+$("#rawset").onclick = () => {
+  const obj = {};
+  for (const p of rawPairs()) { const i = p.indexOf("="); if (i < 1) return msg("NAME=VALUE", true); obj[p.slice(0, i)] = p.slice(i + 1); }
+  set(obj);
+};
+$("#rawunset").onclick = () => post({ unset: rawPairs().map(p => p.split("=")[0]) });
+$("#raw").onkeydown = e => { if (e.key === "Enter") $("#rawset").click(); };
+
+async function poll() {
+  try {
+    const r = await fetch("api/state");
+    if (!busy) render(await r.json());
+    $("#conn").textContent = "live, every 2 s"; $("#conn").className = "";
+  } catch (e) { $("#conn").textContent = "tesla-can.py not reachable"; $("#conn").className = "bad"; }
+  setTimeout(poll, 2000);
+}
+poll();
+</script>
+</body>
+</html>

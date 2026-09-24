@@ -1,0 +1,72 @@
+# Settings for ./tesla start. On the first start this file is copied to tesla.conf (not tracked by
+# git); edit that one. Everything here is commented out and shows the default: remove the # to
+# change a setting. It's a shell file, so ~ and $HOME work; quote values with spaces.
+#
+# Order: defaults < tesla.conf < environment variables (AUDIO=1 ./tesla start) < command line
+# options (./tesla start --audio). ./tesla start --help lists the options, ./tesla config shows
+# what a start would use.
+
+# --- Features --------------------------------------------------------------------------------
+
+# Fake vehicle data: Tesla's simulator + vehicle/tesla-can.py. The car is parked, has a battery,
+# doors, lights, ...; change them on the web panel (PANEL_PORT). Option: --vehicle / --no-vehicle
+#VEHICLE=0
+
+# The car's look (needs VEHICLE=1). Options: --color, --wheels, --performance
+#   color:       RedMulticoat SolidBlack SilverMetallic MidnightSilver DeepBlue PearlWhite
+#   wheels:      Pinwheel18 Stiletto19 Stiletto20 Stiletto20Staggered Gemini19Square Gemini19Staggered
+#   performance: Base Performance Ludicrous BasePlus
+#VEHICLE_COLOR=
+#VEHICLE_WHEELS=
+#VEHICLE_PERFORMANCE=
+
+# Fake GPS (empty = none). Option: --gps "..."
+#   a fixed position:             GPS="37.4419,-122.1430"
+#   drive along a Valhalla route: GPS="--pos 37.4419,-122.1430 --to 37.4275,-122.1697 --speedup 2"
+#   a real receiver (NMEA):       GPS="--uart /dev/ttyACM0 --baud 9600"
+# With VEHICLE=1 the car shifts into D, shows its speed and counts up the odometer while driving.
+#GPS=
+
+# Sound: the car's amplifier on a snd-aloop card, played on this PC (pw-play). Option: --audio
+#AUDIO=0
+# Which of the 8 amplifier channels go left / right (sox remix syntax)
+#AUDIO_REMIX="1v0.5,4v0.5,5v0.5,7v0.5 1v0.5,2v0.5,6v0.5,8v0.5"
+
+# A folder with music as a USB stick (Media -> USB; needs AUDIO=1 to hear it). Option: --music DIR
+#MUSIC=
+
+# Backup camera, shown in R: any V4L2 device, e.g. a phone through scrcpy --v4l2-sink=/dev/video10.
+# ffmpeg converts it into CAMERA_DEV, a second v4l2loopback device (set up once:
+# modprobe v4l2loopback devices=2 video_nr=10,32 exclusive_caps=1,1). Option: --camera DEV
+#CAMERA=
+#CAMERA_DEV=/dev/video32
+#CAMERA_SIZE=1280x960
+
+# Offline navigation (valhalla + qtcar-tmserver), started when maps are installed. Option: --no-nav
+#NAV=1
+
+# More firmware services to start, e.g. SERVICES="qtcar-connman" (list: ./tesla services).
+# Option: --services "..."
+#SERVICES=
+
+# --- Screen and access -------------------------------------------------------------------------
+
+# Screen size of the virtual display. Option: --size WxH
+#SIZE=1920x1200
+# VNC viewer to open: krdc, remote-viewer, remmina, vncviewer or "none" (empty = the first one
+# installed). Option: --viewer CMD
+#VIEWER=
+# VNC and the web panel reachable from other machines (VNC password from ~/.vnc/passwd, create
+# it with: x11vnc -storepasswd). Default: this machine only. Option: --remote
+#REMOTE=0
+#VNC_PORT=5900
+#PANEL_PORT=8099
+
+# Restart QtCar when it exits (it does that on purpose to apply some settings). Option: --no-restart
+#RESTART=1
+
+# --- Image -------------------------------------------------------------------------------------
+
+# The patched firmware image and where it's mounted (see ./tesla build-image)
+#IMAGE=./mcu3-new.ext4
+#CHROOT=./chroot

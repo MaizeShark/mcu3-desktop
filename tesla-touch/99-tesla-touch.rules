@@ -1,0 +1,8 @@
+# Hide the virtual touchscreen created by tesla-touch from the host desktop.
+# Without this the host's libinput (Wayland compositors and Xorg alike) adopts it as a
+# real touchscreen and every touch meant for QtCar also lands on the host desktop.
+# QtCar inside the chroot opens the event node directly and is not affected; it runs as
+# user "tesla", so the node also has to be world-readable (MODE).
+#
+# Install:  sudo cp 99-tesla-touch.rules /etc/udev/rules.d/ && sudo udevadm control --reload
+SUBSYSTEM=="input", ATTRS{name}=="cyttsp6_mt", ENV{LIBINPUT_IGNORE_DEVICE}="1", ENV{ID_INPUT}="", ENV{ID_INPUT_TOUCHSCREEN}="", MODE="0666"
