@@ -16,6 +16,7 @@
 !/notes/
 !/navigation/
 !/vehicle/
+!/bluetooth/
 
 /mcu3-patchkit/downloads/
 # downloaded / built by mcu3_patch.py (sources.toml, src/); never commit the libraries

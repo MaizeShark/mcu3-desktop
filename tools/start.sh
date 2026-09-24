@@ -437,9 +437,11 @@ start_helpers() {
         add_pid $! audio
     fi
     if [ -n "$CAMERA" ]; then
+        local cw=${CAMERA_SIZE%x*} ch=${CAMERA_SIZE#*x}
         ( while :; do
+            # cropped to QtCar's aspect ratio (4:3), not stretched: a 16:9 webcam looked distorted
             ffmpeg -nostdin -loglevel warning -f v4l2 -i "$CAMERA" \
-                -vf "scale=${CAMERA_SIZE%x*}:${CAMERA_SIZE#*x},format=bgr0" -f v4l2 "$CAMERA_DEV"
+                -vf "crop='min(iw,ih*$cw/$ch)':'min(ih,iw*$ch/$cw)',scale=$cw:$ch,format=bgr0" -f v4l2 "$CAMERA_DEV"
             sleep 2
           done ) </dev/null >"$LOG_DIR/camera.log" 2>&1 &
         add_pid $! camera
