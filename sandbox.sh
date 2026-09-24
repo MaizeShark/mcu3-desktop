@@ -15,6 +15,7 @@
 #   --video      pass /dev/video* in (backup camera, [bkcam] in settings.conf)
 #   --music DIR  DIR as a USB stick (/home/tesla/media/usb-music, read-only)
 #
+# QTCAR_ARGS="..." adds QtCar command line options.
 # QtCar runs under the host's gdb (host / mounted at /host, run with the host's loader) with
 # WebKitView::createBrowserClient skipped: without /usr/bin/escalator (root-only, not in the
 # sandbox) CEF kills QtCar after ~20 s. A crash leaves a backtrace in qtcar.log. QtCar and the
@@ -55,7 +56,7 @@ PRELOAD=/usr/lib/icu_preload.so
 for so in egl_pixmap_shim cef_nosandbox sandbox_escalator_stub; do
     [ -f /usr/lib/$so.so ] && PRELOAD=$PRELOAD:/usr/lib/$so.so
 done
-[ "$1" = gdb ] || LD_PRELOAD=$PRELOAD exec ./QtCar --touch evdev,autorange
+[ "$1" = gdb ] || LD_PRELOAD=$PRELOAD exec ./QtCar --touch evdev,autorange $QTCAR_ARGS
 H=/host
 unset LD_PRELOAD    # only for QtCar, not for the host's gdb
 exec $H/lib64/ld-linux-x86-64.so.2 --library-path $H/lib/x86_64-linux-gnu:$H/usr/lib/x86_64-linux-gnu \
@@ -63,7 +64,7 @@ exec $H/lib64/ld-linux-x86-64.so.2 --library-path $H/lib/x86_64-linux-gnu:$H/usr
     -ex 'handle SIGPIPE nostop noprint pass' -ex 'handle SIGUSR1 nostop noprint pass' \
     -ex 'handle SIG32 nostop noprint pass' -ex 'handle SIG33 nostop noprint pass' \
     -ex "set environment LD_PRELOAD=$PRELOAD" -ex 'set follow-fork-mode parent' -ex 'set detach-on-fork on' \
-    ${NOBROWSER:+-x /sandbox-nobrowser.gdb} ${GDBX:+-x /sandbox-extra.gdb} -ex run -ex 'bt 30' --args ./QtCar --touch evdev,autorange
+    ${NOBROWSER:+-x /sandbox-nobrowser.gdb} ${GDBX:+-x /sandbox-extra.gdb} -ex run -ex 'bt 30' --args ./QtCar --touch evdev,autorange $QTCAR_ARGS
 EOF
 chmod +x "$ROOT/sandbox-qtcar.sh"
 cat > "$ROOT/sandbox-nobrowser.gdb" <<'EOF'
@@ -168,7 +169,7 @@ NOBROWSER=1; [ "$BROWSER" = 1 ] && NOBROWSER=
 [ -n "$GDBX" ] && cp "$GDBX" "$ROOT/sandbox-extra.gdb"
 for t in $SHOTS; do ( sleep "$t"; DISPLAY=:97 import -window root "$OUT/shot_$t.png" ) & done
 
-podman run --rm --timeout $((T + 20)) --network host -e QCSVC_NOUSER=1 -e CEF_EXTRA_ARGS="${CEF_EXTRA_ARGS:-}" -e CEF_REMOTE_DEBUGGING_PORT="${CEF_REMOTE_DEBUGGING_PORT:-}" -v /:/host:ro "${DEV[@]}" \
+podman run --rm --timeout $((T + 20)) --network host -e QCSVC_NOUSER=1 -e QTCAR_ARGS="${QTCAR_ARGS:-}" -e CEF_EXTRA_ARGS="${CEF_EXTRA_ARGS:-}" -e CEF_REMOTE_DEBUGGING_PORT="${CEF_REMOTE_DEBUGGING_PORT:-}" -v /:/host:ro "${DEV[@]}" \
     -v /tmp/.X11-unix:/tmp/.X11-unix -v "$OUT":/out --rootfs "$ROOT" /bin/sh -c "
     $SVC
     sleep 3
