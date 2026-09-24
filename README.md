@@ -20,8 +20,9 @@ music stick, a backup camera from any V4L2 source, and offline navigation.
 - **Only firmware 2019.20.4.2 (x86_64)** was ever tested and used. The patch kit checks every
   file it patches and refuses other versions.
 - **Made with an LLM.** Sessions 1 and 2 (May 2026) were done with Claude Sonnet, all later ones
-  with Claude Opus 5.5, guided and tested by a human. The session notes in [`notes/`](notes/)
+  with Claude Opus 5 & 5.5 (about 4.5M Token), guided and tested by a human. The session notes in [`notes/`](notes/)
   show how.
+- **Demonstration Video** [Youtube Video](https://youtu.be/45vGXZr9VNI)
 
 ## Quick start
 
@@ -35,6 +36,7 @@ sudo cp tesla-touch/99-tesla-touch.rules /etc/udev/rules.d/ && sudo udevadm cont
 
 # run
 ./tesla start --vehicle --audio --gps 37.4419,-122.1430
+# Note: on first start or settings changes QtCar can restart!
 ./tesla stop                          # or Ctrl+C
 ```
 
