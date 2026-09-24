@@ -24,7 +24,8 @@ everything was found out.
 | Offline navigation | maps installed, `NAV=1` | podman (only to build tiles) | map tiles (`./tesla build-image`) | `valhalla`, `qtcar-tmserver` | – | `valhalla.log`, `qtcar-tmserver.log` |
 | Vehicle data + panel | `--vehicle` | python3; once: `unicorn`, `pyelftools` | kit group `vehicle` | `qtcar-sim`, `qtcar-vehicle` | `tesla-can.py` (panel :8099) | `qtcar-sim.log`, `qtcar-vehicle.log`, `can.log` |
 | GPS | `--gps` | python3; receiver: read access (group `dialout`) | – | `qtcar-gpsmanager` | `tesla-gps.py` | `gps.log`, `qtcar-gpsmanager.log` |
-| Sound | `--audio` | `snd-aloop`, `arecord`, `sox`, `pw-play` (PipeWire) | kit group `audio` | `audioweaver`, `audiod`, `qtcar-audiod`, `qtcar-mediaserver` | audio pipeline, speech-state keeper | `audio.log`, `audiod.log`, `audioweaver.log`, `qtcar-audiod.log` |
+| Sound | `--audio` | `snd-aloop`, `arecord`, `sox`, `pw-play` (PipeWire) or `pacat`/`aplay`; `tools/99-tesla-sound.rules` | kit group `audio` | `audioweaver`, `audiod`, `qtcar-audiod`, `qtcar-mediaserver` | audio pipeline, speech-state keeper | `audio.log`, `audiod.log`, `audioweaver.log`, `qtcar-audiod.log` |
+| Bluetooth | `--bluetooth` | a Bluetooth adapter (BlueZ stopped while it runs) | – | `dbus`, `bsa_server`, `btd`, `qtcar-bluetooth`, `a2dpbridge` (with audio) | `bluetooth/hci-bridge.py` | `bsa_server.log`, `btd.log`, `qtcar-bluetooth.log`, `bt-bridge.log` |
 | USB music | `--music DIR` | a folder with music | `[usb] media_path` (`system`) | `qtcar-mediaserver` | – | `qtcar-mediaserver.log` |
 | Backup camera | `--camera DEV` | `ffmpeg`, `v4l2loopback` with a second device (`/dev/video32`) | `[bkcam]` (set at start) | – | ffmpeg | `camera.log` |
 

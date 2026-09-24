@@ -25,6 +25,9 @@ it). `config` in there shows the settings used. For a service that hangs or beha
 | `the image was patched by another kit version` | `./tesla build-image` (after a `git pull`) |
 | Media -> USB stays at "Loading..." | the audio services didn't come up (`./tesla status`); with a kit before 2026-09-24 they waited 50 s for the car's gateway: `./tesla build-image` |
 | No sound | `./tesla logs` (pump errors? audio services without output?); `snd-aloop` loaded without `id=model3`: `sudo modprobe -r snd-aloop` and start again |
+| Sound stutters / mostly silent | `./tesla logs` shows many pump errors: the loopback card is taken by PulseAudio/PipeWire (install `tools/99-tesla-sound.rules`, then reload snd-aloop), or the kernel tick is coarse and the high-resolution clock didn't come up (`audio-clock.log`) |
+| Bluetooth music silent | select the Bluetooth source ("Phone") in the Media app; `a2dpbridge` must run (`./tesla status`) |
+| The PC's Bluetooth doesn't work after a run | `./tesla stop` normally gives it back; else `sudo modprobe -r btusb && sudo modprobe btusb`, or a reboot |
 | Camera picture black | the source must deliver frames; `camera.log` has ffmpeg's messages; shift into R |
 | GPS: the car doesn't move | a receiver indoors has no fix (`gps.log`: RMC status V); GpsManager not running (`./tesla status`) |
 | Navigation: "maps missing" or no route | maps not installed (`./tesla check`); the destination is outside the installed region; online routing doesn't work |

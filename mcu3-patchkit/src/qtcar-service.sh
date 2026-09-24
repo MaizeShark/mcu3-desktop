@@ -20,6 +20,8 @@ if [ "$1" = "--list" ]; then
     echo qtcar-sim
     echo audioweaver
     echo audiod
+    echo a2dpbridge
+    echo dbus; echo bsa_server; echo btd
     echo fireplace; echo dog-mode; echo hal-9000
     exit 0
 fi
@@ -89,6 +91,42 @@ if [ "$JOB" = audiod ]; then
     # the audiod user CAP_SYS_NICE; without it the output underran now and then (stutter).
     as_user root env -i PATH="$PATH" HOME=/home/audiod LD_LIBRARY_PATH=/opt/audioweaver LC_ALL=C \
         TPLUG_LOG_XRUN=1 /usr/bin/audiod --audio-type="$TYPE" --audio-api=/opt/audioweaver/dsp-control.csv "$@"
+fi
+
+# Bluetooth music, as /etc/sv/a2dpbridge/run (minus sandbox and taskset): btd plays the phone's
+# audio into the snd-aloop card "virtual"; alsaloop copies it into AudioWeaver's a2dp tplug.
+if [ "$JOB" = a2dpbridge ]; then
+    echo "qtcar-service: a2dpbridge (alsaloop a2dp_in_loop -> a2dp_out_loop)" >&2
+    exec env -i PATH="$PATH" LC_ALL=C /usr/bin/alsaloop -v -p 35 -C a2dp_in_loop -P a2dp_out_loop -U -S1 -l 6144
+fi
+
+# Bluetooth (./tesla start --bluetooth, see bluetooth/README.md): the firmware's own system bus,
+# Broadcom's BSA stack on the "UART" /dev/ttyS0 (on a PC: bluetooth/hci-bridge.py's pseudo
+# terminal, bound there), and Tesla's btd on top, which QtCarBluetooth reaches over D-Bus.
+if [ "$JOB" = dbus ]; then
+    mkdir -p /var/run/dbus
+    rm -f /var/run/messagebus.pid /var/run/dbus/pid /var/run/dbus/system_bus_socket
+    echo "qtcar-service: dbus -> the firmware's system bus (/var/run/dbus)" >&2
+    exec /usr/bin/dbus-daemon --nofork --system
+fi
+if [ "$JOB" = bsa_server ]; then
+    mkdir -p /var/run/bsa_server
+    rm -f /var/run/bsa_server/bt-avk-fifo /var/run/bsa_server/bt-daemon-socket
+    echo "qtcar-service: bsa_server on /dev/ttyS0 ${BSA_ARGS:-}" >&2
+    # no -p (Broadcom firmware patch) unless the controller is the car's BCM4349. Not with env -i:
+    # it segfaults with an empty environment.
+    exec /usr/bin/bsa_server -d /dev/ttyS0 -u /var/run/bsa_server/ ${BSA_ARGS:-}
+fi
+if [ "$JOB" = btd ]; then
+    # it needs the bus (without it, it runs but QtCarBluetooth never finds it) and BSA's socket
+    for i in $(seq 100); do
+        [ -S /var/run/dbus/system_bus_socket ] && [ -S /var/run/bsa_server/bt-daemon-socket ] && break
+        sleep 0.2
+    done
+    mkdir -p /var/lib/btd /var/run/btd
+    cd /var/run/btd || exit 1
+    echo "qtcar-service: btd" >&2
+    exec /usr/bin/btd
 fi
 
 # The videos of fireplace / dog mode / HAL 9000 (as /etc/sv/<name>/run, minus the sandbox):

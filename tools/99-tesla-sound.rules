@@ -1,0 +1,5 @@
+# The loopback sound cards of ./tesla start --audio (snd-aloop "model3" and "virtual", the
+# snd-dummy clock "hrclock") belong to the car's audio stack in the chroot. Keep PulseAudio and
+# PipeWire from adopting them (they would open their streams and cause underruns).
+#   sudo cp tools/99-tesla-sound.rules /etc/udev/rules.d/ && sudo udevadm control --reload
+SUBSYSTEM=="sound", KERNEL=="card*", ATTR{id}=="model3|virtual|hrclock", ENV{PULSE_IGNORE}="1", ENV{ACP_IGNORE}="1"

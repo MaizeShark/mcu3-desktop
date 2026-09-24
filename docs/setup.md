@@ -86,7 +86,15 @@ Details: [`navigation/README.md`](../navigation/README.md). Without maps the map
   `sudo modprobe v4l2loopback devices=2 video_nr=10,32 exclusive_caps=1,1`
   (permanently: `/etc/modprobe.d/` and `/etc/modules-load.d/`).
 
-## 6. Check
+## 6. Sound cards
+
+For `--audio`, keep PulseAudio/PipeWire from adopting the car's loopback sound cards:
+
+```sh
+sudo cp tools/99-tesla-sound.rules /etc/udev/rules.d/ && sudo udevadm control --reload
+```
+
+## 7. Check
 
 ```sh
 ./tesla check

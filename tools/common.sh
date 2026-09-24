@@ -24,7 +24,7 @@ die()  { printf '%sError:%s %s\n' "$RED" "$R0" "$*" >&2; exit 1; }
 # defaults < tesla.conf < environment < command line. CONF_SRC[var] says where a value came from.
 CONF_VARS=(VEHICLE VEHICLE_COLOR VEHICLE_WHEELS VEHICLE_PERFORMANCE GPS AUDIO AUDIO_REMIX MUSIC
            CAMERA CAMERA_DEV CAMERA_SIZE NAV SERVICES SIZE VIEWER REMOTE VNC_PORT PANEL_PORT RESTART
-           IMAGE CHROOT SCREEN NATIVE_DISPLAY TOUCH_DEVICE QTCAR_ARGS GPU)
+           IMAGE CHROOT SCREEN NATIVE_DISPLAY TOUCH_DEVICE QTCAR_ARGS GPU BLUETOOTH BT_ADAPTER)
 PATH_VARS=" MUSIC IMAGE CHROOT "    # relative paths: to the caller's directory (env, command line)
 declare -A CONF_SRC
 
@@ -34,7 +34,7 @@ set_defaults() {
     MUSIC="" CAMERA="" CAMERA_DEV=/dev/video32 CAMERA_SIZE=1280x960 NAV=1 SERVICES=""
     SIZE=1920x1200 VIEWER="" REMOTE=0 VNC_PORT=5900 PANEL_PORT=8099 RESTART=1
     IMAGE=./mcu3-new.ext4 CHROOT=./chroot
-    SCREEN=vnc NATIVE_DISPLAY=:0 TOUCH_DEVICE=auto QTCAR_ARGS="" GPU=auto
+    SCREEN=vnc NATIVE_DISPLAY=:0 TOUCH_DEVICE=auto QTCAR_ARGS="" GPU=auto BLUETOOTH=0 BT_ADAPTER=hci0
 }
 
 # abspath <path> <base dir>: ~ and relative paths resolved against the base dir
@@ -214,6 +214,14 @@ teardown() {
         restore=$(sed -n 's/^NATIVE_RESTORE=//p' "$dir/state" 2>/dev/null)
         [ -n "$restore" ] && DISPLAY=$native_display xrandr $restore 2>/dev/null
     fi
+    # audio clock (low tick kernels): back to jiffies; Bluetooth: give the adapter back to BlueZ
+    local tcard
+    tcard=$(sed -n 's/^TIMER_CARD=//p' "$dir/state" 2>/dev/null)
+    [ -n "$tcard" ] && echo "" | sudo tee "/proc/asound/card$tcard/timer_source" >/dev/null 2>&1
+    sudo pkill -f "aplay -q -D hw:CARD=hrcloc[k]" 2>/dev/null
+    local bt
+    bt=$(sed -n 's/^BT_RESTORE=//p' "$dir/state" 2>/dev/null)
+    [ -n "$bt" ] && restore_bluetooth "$bt" "$(sed -n 's/^BT_USBPORT=//p' "$dir/state" 2>/dev/null)"
     # children of the helper loops (their loop may be gone already). The [x] keeps the pattern
     # from matching the command line of pkill's own sudo.
     pkill -f 'arecord -q -D hw:CARD=model[3]' 2>/dev/null
@@ -267,4 +275,41 @@ for block in open("/proc/bus/input/devices").read().split("\n\n"):
         print("/dev/input/%s\t%s" % (ev.group(1), name.group(1)))
         break
 PY
+}
+
+# restore_bluetooth hciN: give the adapter back to BlueZ after --bluetooth. The bridge took it down;
+# after the Broadcom stack an Intel AX210 didn't answer anymore ("Connection timed out") until its
+# driver was reloaded (which loads its firmware again).
+restore_bluetooth() {
+    local bt=$1 usbport=${2:-} drv i
+    sudo pkill -f "bluetooth/hci-bridge.p[y]" 2>/dev/null
+    for i in $(seq 20); do pgrep -f "bluetooth/hci-bridge.p[y]" >/dev/null || break; sleep 0.2; done
+    sudo systemctl start bluetooth 2>/dev/null
+    for i in $(seq 6); do hciconfig "$bt" 2>/dev/null | grep -q "UP RUNNING" && break; sudo hciconfig "$bt" up 2>/dev/null; sleep 0.5; done
+    if ! hciconfig "$bt" 2>/dev/null | grep -q "UP RUNNING"; then
+        drv=$(sed -n 's/^DRIVER=//p' "/sys/class/bluetooth/$bt/device/uevent" 2>/dev/null)
+        if [ -n "$drv" ]; then
+            sudo modprobe -r "$drv" 2>/dev/null; sleep 1; sudo modprobe "$drv" 2>/dev/null
+            for i in $(seq 12); do hciconfig "$bt" 2>/dev/null | grep -q "UP RUNNING" && break; sleep 0.5; done
+        fi
+    fi
+    # still gone (the chip dropped off USB): power-cycle its USB port, then the hub's empty internal
+    # ports too (on a ThinkPad T480 the AX210 came back only after cycling port 6, it sits on 7)
+    if ! hciconfig "$bt" 2>/dev/null | grep -q "UP RUNNING" && [ -n "$usbport" ] && [ -e "$usbport/disable" ]; then
+        local ports=$usbport p
+        for p in "$(dirname "$usbport")"/*-port*; do
+            [ "$(cat "$p/connect_type" 2>/dev/null)" = "not used" ] && [ -z "$(ls "$p/device" 2>/dev/null)" ] &&
+                ports="$ports $p"
+        done
+        for p in $ports; do echo 1 | sudo tee "$p/disable" >/dev/null; done
+        sleep 3
+        for p in $ports; do echo 0 | sudo tee "$p/disable" >/dev/null; done
+        for i in $(seq 20); do hciconfig "$bt" 2>/dev/null | grep -q "UP RUNNING" && break; sleep 0.5; done
+    fi
+    bluetoothctl power on >/dev/null 2>&1
+    if hciconfig "$bt" 2>/dev/null | grep -q "UP RUNNING"; then
+        info "bluetooth: $bt is back with BlueZ"
+    else
+        warn "bluetooth: $bt didn't come back; try: sudo modprobe -r btusb && sudo modprobe btusb"
+    fi
 }

@@ -1,33 +1,58 @@
-# bluetooth (experimental)
+# bluetooth
 
-The firmware's Bluetooth stack is Broadcom's BSA (`bsa_server`), not BlueZ. On the car it talks to
-a BCM4349 over a UART (`bsa_server -d /dev/ttyS0 -p /lib/firmware/bcm-bt.hcd`); Tesla's `btd`
-(the "lgit" stack, `libbsa`) sits on top and publishes `com.tesla.Bluetooth` on the system D-Bus,
-where `QtCarBluetooth` (service `qtcar-bluetooth`) connects.
+`./tesla start --bluetooth` runs the car's own Bluetooth stack on the PC's adapter: pairing, the
+phone (hands-free profile), contacts and call lists (PBAP), media control (AVRCP) and, with
+`--audio`, music from the phone (A2DP) through the car's audio stack.
 
-`hci-bridge.py` gives BSA a pseudo terminal as its "UART" and forwards the H4 packets unchanged to
-a PC's adapter through the kernel's HCI user channel (raw, exclusive; BlueZ must not use the
-adapter). No translation: HCI is the same for every vendor. Broadcom-only vendor commands are
-rejected by other controllers, and BSA goes on; Broadcom's "LM diagnostics" packets (H4 type 7,
-`07 f0 01`) are dropped by the bridge.
+## How
 
-Manual setup so far (a laptop with an Intel AX210, 2026-09-25), with QtCar running:
+The firmware doesn't use BlueZ. On the car:
 
-```sh
-sudo systemctl stop bluetooth; sudo hciconfig hci0 down
-sudo bluetooth/hci-bridge.py &                       # -> /tmp/hci-bridge-tty
-sudo touch chroot/dev/ttyS0; sudo mount --bind $(readlink /tmp/hci-bridge-tty) chroot/dev/ttyS0
-sudo chroot chroot sh -c 'mkdir -p /var/run/dbus /var/run/bsa_server /var/run/btd /var/lib/btd;
-    rm -f /var/run/messagebus.pid; dbus-daemon --system --fork'
-sudo chroot chroot /usr/bin/bsa_server -d /dev/ttyS0 -u /var/run/bsa_server/ &   # -all=5 traces, -b snoop
-sudo chroot chroot sh -c 'cd /var/run/btd && exec /usr/bin/btd' &
-sudo chroot chroot /usr/local/bin/qtcar-service qtcar-bluetooth &
+```
+QtCarBluetooth (qtcar-bluetooth) --D-Bus (com.tesla.Bluetooth)--> btd --libbsa--> bsa_server --UART--> BCM4349
+                                                                   |
+                                               A2DP audio: btd -> snd-aloop card "virtual" -> a2dpbridge (alsaloop) -> AudioWeaver
 ```
 
-(`bsa_server` segfaults with `env -i`; run it with sudo's environment.)
+`bsa_server` is Broadcom's stack (BSA), talking HCI to its chip over `/dev/ttyS0` and loading a
+firmware patch into it (`-p bcm-bt.hcd`). `btd` is Tesla's daemon on top ("lgit" stack) and
+publishes `com.tesla.Bluetooth` on the firmware's own system bus.
 
-State: pairing, encryption, hands-free, AVRCP and the phonebook (PBAP, contacts and call lists)
-work with Pixel 7a phones. A2DP (music) fails: the phone opens A2DP while the car does too, its own
-connection attempt hangs in an SDP query and times out after 30 s, and Android then drops the
-device. Not built into `./tesla` yet; audio into AudioWeaver (`a2dpbridge`, a second snd-aloop card
-"virtual") isn't set up either.
+On a PC, `hci-bridge.py` gives BSA a pseudo terminal as its "UART" and forwards the HCI packets
+(H4 framing) unchanged to the PC's adapter through the kernel's HCI user channel (raw, exclusive:
+BlueZ is stopped while it runs). There is no translation: HCI is the same for every vendor.
+What the bridge does handle:
+
+- Broadcom vendor commands (`0xFCxx`, OGF 0x3F) are answered by the bridge with "Unknown HCI
+  Command" instead of being sent on. On other controllers these opcodes mean other things, and an
+  Intel AX210 hung after BSA's periodic `0xFC48` (it dropped off USB). BSA carries on without
+  them. `--pass-vendor` sends them on (a real Broadcom/Cypress controller).
+- Broadcom's "LM diagnostics" packets (H4 type 7, `07 f0 01`) are dropped.
+- On exit it resets the controller (HCI_Reset), so BlueZ gets a working adapter back.
+
+`./tesla start --bluetooth` (tools/start.sh `start_bluetooth`): stops `bluetooth.service`, starts
+the bridge (it takes the adapter down itself), binds its pseudo terminal as the chroot's
+`/dev/ttyS0`, and starts the services `dbus` (the firmware's bus), `bsa_server`, `btd` (waits
+for both), `qtcar-bluetooth`, and with `--audio` `a2dpbridge`. `./tesla stop` gives the adapter
+back to BlueZ; if it doesn't answer, it reloads its driver and, as a last resort, power-cycles its
+USB port (`restore_bluetooth` in tools/common.sh).
+
+## State (2026-09-25, ThinkPad T480 with an Intel AX210, Pixel 7a phones on Android 17)
+
+- Pairing, encryption, hands-free, AVRCP and the phonebook work.
+- A2DP: connects (a few times it took a second attempt: the phone and the car both start the
+  audio connection, and the phone's own attempt can time out; the car reconnects by itself).
+  Music plays through AudioWeaver once the car's audio source is Bluetooth: select it in the
+  Media app ("Phone"). Underneath that is audiod's `source-select 3` (0 = the car's own media).
+- Not tried: calls (the hands-free audio path, eCall/mic channels), a second phone at once.
+
+## Debugging
+
+- `bsa_server` traces: stop the job's process and run it by hand in the chroot,
+  `BSA_ARGS="-all=5 -b /tmp/bsa.snoop" /usr/local/bin/qtcar-service bsa_server` (or `bsa_server
+  -all=5 ...` directly). It segfaults with an empty environment (`env -i`).
+- `hci-bridge.py -v` logs every packet (`>` to the controller, `<` from it).
+- The phone's side: Android's HCI snoop log (Developer options, or with root:
+  `setprop persist.bluetooth.btsnooplogmode full`, then Bluetooth off/on), readable with tshark;
+  `adb logcat` shows the profile state machines (`A2dpStateMachine`, `bluetooth-a2dp`).
+- audiod's DSP over TCP 18466: `source-select ?`, `input-meter ?` (inputs 11/12 are A2DP).

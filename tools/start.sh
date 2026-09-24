@@ -16,6 +16,8 @@ Features (defaults from tesla.conf):
   --gps "OPTIONS"        tesla-gps.py options: "--pos LAT,LON --to LAT,LON [--speedup 2]" drives a
                          route, "--uart /dev/ttyACM0 [--baud 9600]" passes a real receiver through
   --audio                sound: the car's amplifier -> this PC's speakers
+  --bluetooth            the car's Bluetooth (Broadcom stack) on this PC's adapter: phone, contacts,
+                         music with --audio (BT_ADAPTER=hci0; BlueZ is stopped while it runs)
   --music DIR            DIR as a USB stick with music (Media -> USB)
   --camera DEV           backup camera from a V4L2 device (e.g. scrcpy --v4l2-sink=/dev/video10)
   --no-nav               no offline navigation (on when maps are installed)
@@ -70,6 +72,8 @@ parse_start_opts() {
             --gps) set_opt GPS "$2"; shift ;;
             --no-gps) set_opt GPS "" ;;
             --audio) set_opt AUDIO 1 ;;
+            --bluetooth) set_opt BLUETOOTH 1 ;;
+            --no-bluetooth) set_opt BLUETOOTH 0 ;;
             --no-audio) set_opt AUDIO 0 ;;
             --music) set_opt MUSIC "$2"; shift ;;
             --no-music) set_opt MUSIC "" ;;
@@ -98,7 +102,7 @@ parse_start_opts() {
         esac
         shift
     done
-    VEHICLE=$(on "$VEHICLE") AUDIO=$(on "$AUDIO") REMOTE=$(on "$REMOTE") RESTART=$(on "$RESTART") NAV=$(on "$NAV")
+    VEHICLE=$(on "$VEHICLE") AUDIO=$(on "$AUDIO") BLUETOOTH=$(on "$BLUETOOTH") REMOTE=$(on "$REMOTE") RESTART=$(on "$RESTART") NAV=$(on "$NAV")
 }
 
 PIDS=()
@@ -184,6 +188,7 @@ print_summary() {
     else off="$off vehicle"; fi
     if [ -n "$GPS" ]; then f="$f, GPS $GPS"; else off="$off gps"; fi
     if [ "$AUDIO" = 1 ]; then f="$f, audio"; else off="$off audio"; fi
+    if [ "$BLUETOOTH" = 1 ]; then f="$f, bluetooth ($BT_ADAPTER)"; else off="$off bluetooth"; fi
     if [ -n "$MUSIC" ]; then f="$f, music ${MUSIC/#$HOME/\~}"; else off="$off music"; fi
     if [ -n "$CAMERA" ]; then f="$f, camera $CAMERA"; else off="$off camera"; fi
     case " $SERVICES " in *" valhalla "*) f="$f, navigation" ;; *) off="$off nav" ;; esac
@@ -216,6 +221,7 @@ cmd_start() {
     if [ "$DRY_RUN" = 1 ]; then
         [ "$VEHICLE" = 1 ] && add_service qtcar-sim qtcar-vehicle
         [ "$AUDIO" = 1 ] && add_service audioweaver audiod qtcar-audiod qtcar-mediaserver
+        [ "$BLUETOOTH" = 1 ] && add_service dbus bsa_server btd qtcar-bluetooth
         [ -n "$MUSIC" ] && add_service qtcar-mediaserver
         [ -n "$GPS" ] && add_service qtcar-gpsmanager
         print_summary "Would start (--dry-run)"
@@ -368,11 +374,15 @@ start_features() {
         # the car's sound card ("model3") is a snd-aloop card here (see the kit's audio group);
         # AudioWeaver plays into loopback device 0, the host plays loopback device 1
         if ! grep -q '^ *[0-9]* \[model3 *\]' /proc/asound/cards; then
-            sudo modprobe snd-aloop id=model3 pcm_substreams=4 || warn "couldn't load snd-aloop, no audio"
+            # two cards like the car: "model3" (the amplifier) and "virtual" (Bluetooth audio loops)
+            sudo modprobe snd-aloop id=model3,virtual enable=1,1 pcm_substreams=4,8 ||
+                warn "couldn't load snd-aloop, no audio"
         fi
         sudo mkdir -p "$CHROOT/dev/snd" && sudo mount --bind /dev/snd "$CHROOT/dev/snd"
         add_service audioweaver audiod qtcar-audiod qtcar-mediaserver
+        audio_clock
     fi
+    [ "$BLUETOOTH" = 1 ] && start_bluetooth
     if [ -n "$CAMERA" ]; then
         # QtCar's backup camera reads V4L2 XR24 (32 bit BGRX) from [bkcam] deviceId. ffmpeg
         # converts $CAMERA (any format, e.g. scrcpy's YU12 on v4l2loopback) into CAMERA_DEV.
@@ -428,9 +438,12 @@ start_helpers() {
         # what AudioWeaver sends to the base amp (8 channels, 32 bit) -> stereo -> the host's sound;
         # summed at half level (AUDIO_REMIX): at full level the sum clipped
         ( while :; do
-            arecord -q -D hw:CARD=model3,DEV=1,SUBDEV=0 -f S32_LE -c 8 -r 48000 -t raw |
+            # 192-frame (4 ms) periods like audiod's: with the model3 card clocked by a sound timer
+            # (low tick rate kernels, see start_features) both ends of a cable must match
+            arecord -q -D hw:CARD=model3,DEV=1,SUBDEV=0 -f S32_LE -c 8 -r 48000 -t raw \
+                --period-size=192 --buffer-size=3072 |
                 sox -q -t raw -e signed -b 32 -c 8 -r 48000 - -t raw -e signed -b 16 -c 2 - remix -m $AUDIO_REMIX |
-                pw-play --format s16 --channels 2 --rate 48000 -
+                play_stereo
             echo "tesla: audio pipeline exited, restarting in 2 s [t=$(date +%s)]"
             sleep 2
           done ) </dev/null >"$LOG_DIR/audio.log" 2>&1 &
@@ -551,4 +564,60 @@ start_viewer() {
         *) $VIEWER "vnc://localhost:$VNC_PORT" >/dev/null 2>&1 & add_pid $! viewer ;;
     esac
 
+}
+
+# 16 bit stereo 48 kHz from stdin to the PC's speakers: PipeWire, PulseAudio or plain ALSA
+play_stereo() {
+    if command -v pw-play >/dev/null; then pw-play --format s16 --channels 2 --rate 48000 -
+    elif command -v pacat >/dev/null; then pacat --playback --format=s16le --channels=2 --rate=48000 --latency-msec=60
+    else aplay -q -t raw -f S16_LE -c 2 -r 48000 -
+    fi
+}
+
+# On kernels with a coarse tick (Debian: 250 Hz) snd-aloop moves in 4 ms jiffies steps and
+# audiod's 4 ms periods underrun all the time (hundreds of "Pump error"s a minute, audio mostly
+# silent). Then the model3 card gets a sound timer instead: snd-dummy's PCM, which runs on a
+# high-resolution timer, playing with exactly audiod's period (192 frames). snd-aloop requires
+# every stream of the card to use that period (the host's arecord does).
+audio_clock() {
+    local res card
+    res=$(sed -n 's/^G0:.*: *\([0-9.]*\)us.*/\1/p' /proc/asound/timers 2>/dev/null | cut -d. -f1)
+    [ -n "$res" ] && [ "$res" -gt 1000 ] || return 0
+    card=$(awk '$2 == "[model3" {print $1}' /proc/asound/cards)
+    [ -n "$card" ] || return 0
+    grep -q '^ *[0-9]* \[hrclock' /proc/asound/cards ||
+        sudo modprobe snd-dummy hrtimer=1 pcm_devs=1 pcm_substreams=1 id=hrclock ||
+        { warn "couldn't load snd-dummy: audio will stutter (system timer ${res} us)"; return 0; }
+    ( while :; do
+        sudo aplay -q -D hw:CARD=hrclock,DEV=0 -f S16_LE -c 2 -r 48000 --period-size=192 --buffer-size=768 \
+            -t raw /dev/zero
+        sleep 1
+      done ) </dev/null >"$LOG_DIR/audio-clock.log" 2>&1 &
+    add_pid $! audio-clock
+    echo hrclock | sudo tee "/proc/asound/card$card/timer_source" >/dev/null
+    echo "TIMER_CARD=$card" >>"$LOG_DIR/state"
+    info "audio: kernel tick ${res} us, the model3 card runs on a high-resolution clock (snd-dummy)"
+}
+
+# Bluetooth: the firmware's Broadcom stack (bsa_server) on this PC's adapter, through
+# bluetooth/hci-bridge.py (HCI user channel <-> a pseudo terminal bound as the chroot's ttyS0).
+start_bluetooth() {
+    local dev=${BT_ADAPTER#hci} tty
+    [ -d "/sys/class/bluetooth/hci$dev" ] || { warn "no Bluetooth adapter hci$dev, no Bluetooth"; BLUETOOTH=0; return; }
+    if systemctl is-active -q bluetooth 2>/dev/null; then
+        sudo systemctl stop bluetooth && echo "BT_RESTORE=hci$dev" >>"$LOG_DIR/state"
+        info "bluetooth: BlueZ stopped while it runs (the adapter belongs to the car's stack)"
+    fi
+    # the adapter's USB port, to power-cycle it if it hangs (see restore_bluetooth)
+    local port
+    port=$(readlink -f "/sys/class/bluetooth/hci$dev/device/../port" 2>/dev/null)
+    [ -e "$port/disable" ] && echo "BT_USBPORT=$port" >>"$LOG_DIR/state"
+    sudo python3 bluetooth/hci-bridge.py --dev "$dev" --link "$LOG_DIR/bt-tty" >"$LOG_DIR/bt-bridge.log" 2>&1 &
+    add_pid $! bt-bridge
+    for _ in $(seq 50); do grep -q '^ready' "$LOG_DIR/bt-bridge.log" 2>/dev/null && break; sleep 0.1; done
+    tty=$(sed -n 's/^ready: \([^ ]*\).*/\1/p' "$LOG_DIR/bt-bridge.log")
+    [ -n "$tty" ] || { warn "the Bluetooth bridge didn't start, see bt-bridge.log"; BLUETOOTH=0; return; }
+    sudo touch "$CHROOT/dev/ttyS0" && sudo mount --bind "$tty" "$CHROOT/dev/ttyS0"
+    add_service dbus bsa_server btd qtcar-bluetooth
+    [ "$AUDIO" = 1 ] && add_service a2dpbridge
 }

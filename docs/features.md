@@ -108,9 +108,30 @@ charging, lights, outside temperature, tire pressures, telltales.
   records the other end, mixes the 8 channels to stereo (`AUDIO_REMIX`) and plays it.
 - Logs: `audio.log` (the host side: clipping, restarts), `audiod.log`, `audioweaver.log`,
   `qtcar-audiod.log`. `./tesla logs` counts pump errors and clipped samples.
+- Kernels with a coarse timer tick (Debian: 250 Hz; Ubuntu uses 1000 Hz) made the loopback card
+  run in 4 ms jumps and the audio stutter badly. Then `./tesla start` clocks the `model3` card
+  from a dummy sound card on a high-resolution timer (`snd-dummy` "hrclock", snd-aloop's
+  `timer_source`), automatically; the log says "the model3 card runs on a high-resolution clock".
+- PulseAudio/PipeWire must not adopt the loopback cards: install `tools/99-tesla-sound.rules`
+  (`./tesla check` warns). Without PipeWire, the host side plays through `pacat` or `aplay`.
 - Limits: the stereo mix of the 8 amplifier channels is approximate. Streaming services don't
   work: TuneIn needs Tesla's media backend, Spotify's endpoint for this firmware is gone. Radio
   and Bluetooth have no hardware.
+
+## Bluetooth
+
+`--bluetooth` (`BLUETOOTH=1`): the car's own Bluetooth stack (Broadcom's BSA and Tesla's `btd`
+from the firmware) runs on the PC's adapter. Pairing a phone, the phone app (contacts, call
+lists), media control work; with `--audio` the phone's music plays through the car's audio.
+
+- Needs: a Bluetooth adapter (`BT_ADAPTER=hci0`), python3. BlueZ (`bluetooth.service`) is
+  stopped while it runs and gets the adapter back at `./tesla stop`.
+- How: `bluetooth/hci-bridge.py` hands the adapter's raw HCI channel to the firmware's stack as
+  if it were its serial Broadcom chip. Details: [`bluetooth/README.md`](../bluetooth/README.md).
+- Music: select the Bluetooth source in the Media app ("Phone").
+- Logs: `bsa_server.log`, `btd.log`, `qtcar-bluetooth.log`, `bt-bridge.log`, `a2dpbridge.log`.
+- Limits: tested with an Intel AX210 and two Android phones. The music connection sometimes
+  needs a second attempt (the car reconnects by itself). Calls are untested.
 
 ## USB music
 

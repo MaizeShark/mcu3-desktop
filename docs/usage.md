@@ -61,6 +61,7 @@ defaults < `tesla.conf` < environment variables of the same name < command line 
 | `--gps SPEC` / `--no-gps` | `GPS=` | `LAT,LON`, or `tesla-gps.py` options (see [features.md](features.md#gps)) |
 | `--audio` / `--no-audio` | `AUDIO=0` | sound |
 | | `AUDIO_REMIX=...` | which amplifier channels go left/right (`sox remix` syntax) |
+| `--bluetooth` / `--no-bluetooth` | `BLUETOOTH=0`, `BT_ADAPTER=hci0` | the car's Bluetooth on this PC's adapter (BlueZ is stopped while it runs) |
 | `--music DIR` / `--no-music` | `MUSIC=` | a folder as USB stick |
 | `--camera DEV` / `--no-camera` | `CAMERA=` | backup camera source |
 | | `CAMERA_DEV=/dev/video32`, `CAMERA_SIZE=1280x960` | the device QtCar reads, the picture size |

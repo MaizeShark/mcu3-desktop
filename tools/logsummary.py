@@ -16,7 +16,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOGS = os.path.join(os.path.dirname(HERE), "logs")
 # logs of the host-side helpers; every other *.log in a run is a firmware service
-HELPER_LOGS = {"qtcar", "can", "gps", "audio", "camera", "x11vnc", "xvfb", "events", "can-db"}
+HELPER_LOGS = {"qtcar", "can", "gps", "audio", "camera", "x11vnc", "xvfb", "events", "can-db", "audio-clock", "bt-bridge"}
 # service restart lines of the loops in ./tesla start (and start_all.sh before it)
 EXIT_RE = re.compile(r"^(?:tesla|start_all): (\S+) exited \((\d+)\).*?(?:\[t=(\d+)\])?$")
 # known problems: (regex, text); counted per log
@@ -102,7 +102,8 @@ def service_status(run):
         else:
             m = re.search(r"^qtcar-service: \S+ -> (\S+)", text, re.M)
             binary = m.group(1) if m else {"valhalla": "valhalla_server", "audioweaver": "AWE_command_line_tesla",
-                                           "audiod": "audiod"}.get(name, name)
+                                           "audiod": "audiod", "dbus": "dbus-daemon",
+                                           "a2dpbridge": "alsaloop"}.get(name, name)
             restarts = sum(1 for l in text.splitlines() if EXIT_RE.match(l))
         services.append({"name": name, "bin": binary, "up": binary in running, "restarts": restarts,
                          "log": name + ".log"})
@@ -257,9 +258,9 @@ class Summary:
             return
         notes, level = [], "ok"
         pump = len(re.findall(r"Pump error", read(audiod)))
-        if pump:
+        if pump > 3:    # one or two at startup are normal
             notes.append(f"{pump} pump error(s) in audiod.log")
-            level = "warn" if pump < 10 else "bad"
+            level = "warn" if pump < 30 else "bad"
         host = read(os.path.join(self.run, "audio.log"))
         clipped = sum(int(n) for n in re.findall(r"clipped (\d+) samples", host))
         if clipped:
@@ -333,7 +334,9 @@ class Summary:
         if not conf:
             return
         vals = dict(re.match(r"(\w+)=(\S*)", l).groups() for l in conf.splitlines() if re.match(r"\w+=", l))
-        on = [k.lower() for k in ("VEHICLE", "AUDIO") if vals.get(k) == "1"]
+        on = [k.lower() for k in ("VEHICLE", "AUDIO", "BLUETOOTH") if vals.get(k) == "1"]
+        if vals.get("SCREEN") == "native":
+            on.append("native screen")
         on += [f"{k.lower()} {vals[k]}" for k in ("GPS", "MUSIC", "CAMERA") if vals.get(k) not in (None, "", "''")]
         self.add("Features", ", ".join(on) or "none (only QtCar)", "ok")
 

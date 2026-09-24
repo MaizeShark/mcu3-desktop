@@ -52,6 +52,7 @@ Touch: left click / drag = finger, mouse wheel = pinch zoom, right click = long 
 | Vehicle data: battery, gear, speed, doors, locks, charging, lights, tires, telltales; the UI's buttons work; a web panel to change it all; the car's color and wheels | `--vehicle` |
 | GPS: a position, a route to drive, or a real receiver | `--gps` |
 | Sound: chimes, turn signals, media, volume | `--audio` |
+| Bluetooth with the car's own stack: pairing, phone, contacts, music from the phone | `--bluetooth` |
 | A folder as USB stick with music | `--music DIR` |
 | Backup camera from any V4L2 device | `--camera DEV` |
 

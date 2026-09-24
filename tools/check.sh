@@ -174,16 +174,33 @@ check_features() {
     v=$(on "$AUDIO")
     tool "$(lvl "$v")" arecord alsa-utils "audio: reads the car's amplifier"
     tool "$(lvl "$v")" sox sox "audio: 8 channels -> stereo"
-    tool "$(lvl "$v")" pw-play pipewire-bin "audio: plays on this PC"
+    if command -v pw-play >/dev/null; then chk ok "pw-play (audio: plays on this PC, PipeWire)"
+    elif command -v pacat >/dev/null; then chk ok "pacat (audio: plays on this PC, PulseAudio)"
+    else tool "$(lvl "$v")" aplay alsa-utils "audio: plays on this PC (ALSA)"; fi
     if grep -q '^ *[0-9]* \[model3 *\]' /proc/asound/cards 2>/dev/null; then
         chk ok "sound card model3 (snd-aloop) loaded"
     elif lsmod 2>/dev/null | grep -q '^snd_aloop'; then
         chk "$( [ "$v" = 1 ] && echo fail || echo off)" "snd-aloop is loaded, but not as card model3 (audio)" \
             "sudo modprobe -r snd-aloop (the next start loads it with id=model3)"
-    elif modinfo snd-aloop >/dev/null 2>&1; then
+    elif PATH=$PATH:/sbin:/usr/sbin modinfo snd-aloop >/dev/null 2>&1 ||
+        ls /lib/modules/"$(uname -r)"/kernel/sound/drivers/snd-aloop.ko* >/dev/null 2>&1; then
         chk ok "snd-aloop available (loaded as card model3 at start)"
     else
         chk "$(lvl "$v")" "kernel module snd-aloop not available (audio)" "sudo apt install linux-modules-extra-\$(uname -r)"
+    fi
+
+    # the loopback cards must not be taken by PulseAudio / PipeWire
+    if [ "$(on "$AUDIO")" = 1 ] && pgrep -x "pulseaudio|pipewire" >/dev/null && [ ! -f /etc/udev/rules.d/99-tesla-sound.rules ]; then
+        chk warn "the sound server may adopt the loopback cards (underruns, stutter)" \
+            "sudo cp tools/99-tesla-sound.rules /etc/udev/rules.d/ && sudo udevadm control --reload (then reload snd-aloop or reboot)"
+    fi
+
+    # BLUETOOTH
+    v=$(on "$BLUETOOTH")
+    if [ -d "/sys/class/bluetooth/$BT_ADAPTER" ]; then
+        chk ok "Bluetooth adapter $BT_ADAPTER ($(cat /sys/class/bluetooth/$BT_ADAPTER/device/uevent 2>/dev/null | sed -n 's/^DRIVER=//p'))"
+    else
+        chk "$( [ "$v" = 1 ] && echo fail || echo off)" "no Bluetooth adapter $BT_ADAPTER (bluetooth)" "BT_ADAPTER=hciN in tesla.conf"
     fi
 
     # MUSIC
@@ -272,6 +289,7 @@ features_on() {
     [ "$(on "$AUDIO")" = 1 ] && f="$f audio"
     [ -n "$MUSIC" ] && f="$f music"
     [ -n "$CAMERA" ] && f="$f camera"
+    [ "$(on "$BLUETOOTH")" = 1 ] && f="$f bluetooth"
     [ "$NAV" = 1 ] && f="$f nav"
     echo "${f# }"
 }

@@ -32,6 +32,11 @@
 # Which of the 8 amplifier channels go left / right (sox remix syntax)
 #AUDIO_REMIX="1v0.5,4v0.5,5v0.5,7v0.5 1v0.5,2v0.5,6v0.5,8v0.5"
 
+# The car's Bluetooth (Broadcom's stack from the firmware) on this PC's adapter: pairing, phone,
+# contacts, music (with AUDIO=1). BlueZ is stopped while it runs. Option: --bluetooth
+#BLUETOOTH=0
+#BT_ADAPTER=hci0
+
 # A folder with music as a USB stick (Media -> USB; needs AUDIO=1 to hear it). Option: --music DIR
 #MUSIC=
 

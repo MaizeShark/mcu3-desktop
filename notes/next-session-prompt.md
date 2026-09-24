@@ -1,55 +1,38 @@
-Tesla Model 3 MCU chroot project in ~/TeslaMCU. Read CLAUDE.md, README.md, then
-notes/session5-2026-09-23.md (the latest session: vehicle data, audio, camera, videos, music).
+Tesla Model 3 MCU3 project in ~/TeslaMCU (public: github.com/MaizeShark/mcu3-desktop). Read
+CLAUDE.md, README.md, docs/, then notes/session6-2026-09-24.md (the latest session: the ./tesla
+command, docs, native screen on a touch laptop, GPU, camera, Bluetooth, audio clock).
 
-Current state (all working in the real chroot, start_all.sh):
-- QtCar with touch (tesla-touch), all firmware services (qtcar-service), offline navigation
-  (Northern California), the browser (Chrome 73).
-- VEHICLE=1: Tesla's simulator + vehicle/tesla-can.py (merge mode, presets, answers the UI's
-  buttons: frunk/trunk/lock/charge port/lights/wipers) and a web panel on http://localhost:8099.
-  VEHICLE_COLOR / VEHICLE_WHEELS / VEHICLE_PERFORMANCE.
-- GPS=...: fixed position, a Valhalla route, or a real receiver (--uart).
-- AUDIO=1: AudioWeaver + audiod (kit patch audiod-no-a2b) on snd-aloop as card "model3",
-  host plays it via arecord | sox | pw-play. Chimes, media, fireplace sound, GUI volume work.
-- MUSIC=DIR: a folder as USB stick (Media -> USB). CAMERA=/dev/videoN: backup camera via ffmpeg
-  -> /dev/video32 (XR24). Fireplace / dog mode / HAL 9000 videos (kit's /sbin/sv wrapper).
-- ./sandbox.sh: QtCar + services in rootless podman without sudo (gdb, screenshots, xdotool,
-  --audio, --video, --music). Shares the host network: stop it before start_all.sh.
+Current state:
+- `./tesla start|stop|status|check|logs|config|services|build-image`, settings in tesla.conf.
+  Everything from before works (QtCar, touch, services, offline navigation, vehicle data + web
+  panel, GPS, browser, sound, USB music, backup camera, videos).
+- New in session 6: `--native` (QtCar on the PC's own screen, letterboxed with black bars, a real
+  touchscreen passed through by `tesla-touch --from`, OpenGL on Intel GPUs with Mesa 18's i965),
+  `--bluetooth` (the firmware's Broadcom BSA stack + btd on the PC's adapter through
+  bluetooth/hci-bridge.py: pairing, phone, contacts, A2DP music into AudioWeaver), the audio
+  clock for 250 Hz kernels (snd-dummy "hrclock" as snd-aloop's timer_source), the webcam cropped
+  to 4:3, the PulseAudio/PipeWire udev rule (tools/99-tesla-sound.rules).
+- Test laptop: ThinkPad T480 (touchscreen, Intel AX210) with a Debian 13 live system in RAM,
+  `ssh user@192.168.200.40` (passwordless sudo; everything there is gone after its reboot; don't
+  reboot it). Its copy: ~/mcu3-desktop (repo files via rsync of `git ls-files`, the image copied
+  with zstd). A rooted Pixel 7a ("Pixel 7a 2") is on this PC's adb, paired with the laptop's "Tesla".
 
-Commit and push to the Forgejo remote as often as you like.
+Open, roughly in order (ask before large restructurings):
+1. Bluetooth: does selecting "Phone" in QtCar's Media app switch audiod to source 3 (A2DP) by
+   itself? Calls (hands-free audio, microphone). The A2DP connect race (sometimes a second try).
+   A USB power cycle was needed once to revive the AX210; watch whether the vendor-command filter
+   and the reset on exit keep it away.
+2. The patch kit: remove the patches that do nothing (gui-escalator-*, gui-cgroup-exit-*, the
+   *-revert entries, the chrome-sandbox patches); try `--prod` (QTCAR_ARGS) instead of the assert
+   patches, with FEATURE_vectorMapTilesEnabled pinned off (prod mode leaves the map empty). Test on
+   the laptop (sudo works there). Existing images still carry the old bytes: handle that.
+3. A bootable stick: a script that builds a Debian (or Ubuntu: 1000 Hz tick) live image locally
+   from the user's own dump, booting straight into `./tesla start --native` (never distributable:
+   it contains the firmware).
+4. Smaller: USB "Loading..." should be fixed by the audio_type change (verify); TPMS warnings;
+   "+0 mi" charge added; seat heaters / HVAC requests; AMD GPUs (radeonsi_dri.so -> the kit's
+   Gallium megadriver).
 
-Goal of this session: improve the existing tools and make them more user friendly. No big new
-features. In rough order (ask me before large restructurings):
-
-1. Starting: start_all.sh has grown to many env variables (AUDIO, VEHICLE, GPS, MUSIC, CAMERA,
-   VEHICLE_COLOR, ...). A config file (e.g. `tesla.conf`, commented, with defaults) and/or
-   command line options (`./start_all.sh --audio --music ~/Music`), a `--help`, and a clear
-   summary at startup of what is enabled and where things are (VNC, panel, logs).
-2. Checks with helpful messages before starting: kit applied to the image (and which version),
-   snd-aloop / v4l2loopback / uinput available, host tools present (x11vnc, sox, pw-play,
-   ffmpeg, podman ...), sandbox running on the same ports, image mounted/unmounted.
-3. Stopping and cleanup: a clean stop (Ctrl+C and a `./start_all.sh stop` or similar), no
-   leftovers (processes, mounts). Consider running the image in a rootful container (podman as
-   root with the image as rootfs) instead of the chroot, if everything keeps working (devices,
-   escalator, browser, audio, camera).
-4. After a run: a short log summary (services that restarted, crashes in `journalctl -k`, audio
-   underruns, GPS fix), so a problem report is quick.
-5. Web panel: show which services run, link to logs; maybe start/stop audio, camera, music there.
-   Panel values that fight with GPS (gear/speed) should be clearly marked.
-6. Kit: one command to build/update the image (`mcu3_patch.py` + maps + settings), explain
-   what changed (`--check` summary), and a simpler "fresh image" path.
-7. Docs: README as a user guide (what works, what needs what, how to use each option, known
-   limits), component READMEs up to date, notes trimmed. Maybe drop `legacy/`.
-
-Known issues / leftovers (smaller, only if cheap):
-- After a restart QtCar reopens USB as the last source and stays at "Loading..."; tapping the
-  USB tab works.
-- TuneIn needs Tesla's backend (deejay-prd.ui.tesla.services), Spotify's eSDK endpoint is gone;
-  an own TuneIn-like backend with internet radio would be a separate project.
-- TPMS warnings don't trigger; "+0 mi" charge added; seat heaters / HVAC requests not answered.
-- Sound a bit off: the 8 base amp channels are mixed to stereo roughly (AUDIO_REMIX).
-- Root-only files (mode 700) are missing from sandbox/rootfs; ask me for a copy when needed.
-
-How to work: test in the sudo-free sandbox first (./sandbox.sh, see CLAUDE.md). I (the user) run
-sudo commands and give you the log folder from logs/. Keep changes in the repo tools (patch kit,
-qtcar-service, start_all.sh, vehicle/, navigation/), not as manual edits to the image. Keep an eye
-on context; stop at a good point and update notes + this prompt before it runs out.
+How to work: test in the sandbox or on the laptop first; the user runs sudo commands on this PC.
+Commit often, push to origin (the user's Forgejo); push to `github` only when asked, after
+checking for firmware files, binaries, keys and private details.
