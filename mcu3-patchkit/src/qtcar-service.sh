@@ -103,9 +103,11 @@ case "$JOB" in fireplace|dog-mode|hal-9000)
     esac
     QTCAR_PID=$(pidof QtCar | cut -d' ' -f1)
     DISP=$(tr '\0' '\n' <"/proc/$QTCAR_PID/environ" 2>/dev/null | sed -n 's/^DISPLAY=//p')
+    XAUTH=$(tr '\0' '\n' <"/proc/$QTCAR_PID/environ" 2>/dev/null | sed -n 's/^XAUTHORITY=//p')
     mkdir -p /home/tvideo && chown -hR tvideo:tvideo /home/tvideo 2>/dev/null
     echo "qtcar-service: $JOB -> tvideo $ARGS (DISPLAY ${DISP:-:1})" >&2
-    as_user tvideo env -i PATH="$PATH" HOME=/home/tvideo DISPLAY="${DISP:-:1}" LC_ALL=C /usr/bin/tvideo $ARGS
+    as_user tvideo env -i PATH="$PATH" HOME=/home/tvideo DISPLAY="${DISP:-:1}" XAUTHORITY="$XAUTH" LC_ALL=C \
+        /usr/bin/tvideo $ARGS
     ;;
 esac
 

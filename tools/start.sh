@@ -23,13 +23,19 @@ Features (defaults from tesla.conf):
   --no-vehicle, --no-gps, --no-audio, --no-music, --no-camera   switch off what tesla.conf enables
 
 Screen and access:
-  --size WxH             screen size (default 1920x1200)
+  --native               QtCar on this PC's own screen instead of a virtual one over VNC:
+                         fullscreen, scaled to fit with black bars, the touchscreen passed through
+                         (without one the mouse is a finger). Run it in the desktop session.
+  --vnc                  the virtual screen over VNC (default)
+  --touch-device DEV     native: the touchscreen (default: found automatically)
+  --size WxH             the UI's size (default 1920x1200, the car's screen)
   --viewer CMD|none      VNC viewer to open (default: krdc, remote-viewer, remmina or vncviewer)
   --remote               VNC (password: x11vnc -storepasswd) and panel reachable from the network
   --no-restart           don't restart QtCar when it exits
 
 Other:
   --config FILE          settings file instead of tesla.conf
+  --qtcar-args "..."     more QtCar options (e.g. --prod)
   --verbose, -v          QtCar's output here too (it's always in logs/latest/qtcar.log)
   --strace "SVC ..."     run these services under strace (-f -tt); the traces end up in the
                          log folder as strace-SVC.txt (debugging)
@@ -50,7 +56,7 @@ parse_start_opts() {
         opt=$1
         case "$opt" in --*=*) val=${opt#*=}; opt=${opt%%=*}; set -- "$opt" "$val" "${@:2}" ;; esac
         case "$opt" in
-            --color|--wheels|--performance|--gps|--music|--camera|--services|--size|--viewer|--config|--strace)
+            --color|--wheels|--performance|--gps|--music|--camera|--services|--size|--viewer|--config|--strace|--touch-device|--qtcar-args)
                 [ $# -ge 2 ] || die "$opt needs a value (./tesla start --help)" ;;
         esac
         case "$opt" in
@@ -73,6 +79,10 @@ parse_start_opts() {
             --size) set_opt SIZE "$2"; shift ;;
             --viewer) set_opt VIEWER "$2"; shift ;;
             --remote) set_opt REMOTE 1 ;;
+            --native) set_opt SCREEN native ;;
+            --vnc) set_opt SCREEN vnc ;;
+            --touch-device) set_opt TOUCH_DEVICE "$2"; shift ;;
+            --qtcar-args) set_opt QTCAR_ARGS "$2"; shift ;;
             --no-restart) set_opt RESTART 0 ;;
             --config) shift ;;      # read before the config (./tesla)
             --dry-run|-n) DRY_RUN=1 ;;
@@ -154,7 +164,9 @@ print_summary() {
     local what=$1 viewer_note="" off=""
     [ -n "${VIEWER_USED:-}" ] && viewer_note=" (viewer: $VIEWER_USED)"
     if [ "$what" = Running ]; then step "$what$R0  ${DIM}(stop: Ctrl+C here, or ./tesla stop)$R0"; else step "$what"; fi
-    if [ "$REMOTE" = 1 ]; then
+    if [ "$SCREEN" = native ]; then
+        info "Screen    native $NATIVE_DISPLAY${NATIVE_OUT:+ ($NATIVE_OUT $PANEL)}, touch: ${TOUCH_FROM:-mouse}"
+    elif [ "$REMOTE" = 1 ]; then
         info "Screen    $SIZE, VNC on port $VNC_PORT of this machine, password protected$viewer_note"
     else
         info "Screen    $SIZE, VNC localhost:$VNC_PORT$viewer_note"
@@ -206,7 +218,7 @@ cmd_start() {
         exit 0
     fi
 
-    sudo -v || exit 1
+    sudo_auth || exit 1
     LOG_DIR=$LOGS/$(date +%Y%m%d-%H%M%S)
     mkdir -p "$LOG_DIR"
     ln -sfn "$(basename "$LOG_DIR")" "$LOGS/latest"
@@ -218,6 +230,7 @@ IMAGE=$IMAGE
 VNC_PORT=$VNC_PORT
 PANEL_PORT=$PANEL_PORT
 VEHICLE=$VEHICLE
+SCREEN=$SCREEN
 MOUNTED_IMAGE=0
 EOF
     : >"$LOG_DIR/pids"
@@ -228,7 +241,7 @@ EOF
     trap 'exit 130' INT TERM HUP
     # keep sudo's timestamp fresh: the cleanup at the end (also after ./tesla stop from another
     # terminal, hours later) must not ask for a password
-    ( while sleep 60; do sudo -n -v 2>/dev/null || exit; done ) </dev/null >/dev/null 2>&1 &
+    ( while sleep 60; do sudo -n -v 2>/dev/null || sudo -n true 2>/dev/null || exit; done ) </dev/null >/dev/null 2>&1 &
     add_pid $! sudo-keepalive
 
     # leftovers of an earlier run (e.g. a closed terminal) would hold the services' ports
@@ -249,19 +262,7 @@ EOF
         sed -i 's/^MOUNTED_IMAGE=.*/MOUNTED_IMAGE=1/' "$LOG_DIR/state"
     fi
 
-    step "Screen and VNC"
-    if xdpyinfo -display $DISPLAY_NUM >/dev/null 2>&1; then
-        info "X display $DISPLAY_NUM already running, using it"
-    else
-        Xvfb $DISPLAY_NUM -screen 0 "${SIZE}x24" +extension RECORD -nolisten tcp 2>"$LOG_DIR/xvfb.log" &
-        add_pid $! Xvfb
-        for _ in $(seq 50); do xdpyinfo -display $DISPLAY_NUM >/dev/null 2>&1 && break; sleep 0.1; done
-    fi
-    local vnc_access=(-localhost -nopw)
-    [ "$REMOTE" = 1 ] && vnc_access=(-usepw)
-    x11vnc -display $DISPLAY_NUM "${vnc_access[@]}" -rfbport "$VNC_PORT" -forever -shared -noxdamage -quiet \
-        >"$LOG_DIR/x11vnc.log" 2>&1 &
-    add_pid $! x11vnc
+    if [ "$SCREEN" = native ]; then start_screen_native; else start_screen_vnc; fi
 
     step "Mounts and touch"
     sudo mkdir -p "$CHROOT/dev/input"
@@ -277,22 +278,17 @@ EOF
         sudo mount --bind "/dev/$dev" "$CHROOT/dev/$dev"
     done
     sudo mount -t cgroup -o net_cls none "$CHROOT/sys/fs/cgroup/net_cls"
-    sudo "$TOUCH_BIN" --display $DISPLAY_NUM --bind "$CHROOT/dev/input/touch" \
+    # QtCar's touchscreen: tesla-touch turns the X mouse (VNC) or a real touchscreen (native,
+    # mapped to the letterboxed UI) into a virtual multitouch device, bound as /dev/input/touch
+    local touch_args=(--display "$QT_DISPLAY")
+    [ -n "${TOUCH_FROM:-}" ] && touch_args=(--from "$TOUCH_FROM" --panel "$PANEL")
+    sudo "$TOUCH_BIN" "${touch_args[@]}" --bind "$CHROOT/dev/input/touch" \
         >"$LOG_DIR/touch.out" 2> >(tee "$LOG_DIR/touch.err" >&2) &
     add_pid $! tesla-touch
     for _ in $(seq 100); do grep -q '^ready' "$LOG_DIR/touch.out" 2>/dev/null && break; sleep 0.1; done
     grep -q '^ready' "$LOG_DIR/touch.out" || die "tesla-touch failed to start, see $LOG_DIR/touch.err"
 
-    if [ -z "$VIEWER" ]; then
-        for v in krdc remote-viewer remmina vncviewer; do command -v $v >/dev/null && VIEWER=$v && break; done
-    fi
-    VIEWER_USED=${VIEWER:-}
-    case "${VIEWER:-none}" in
-        none) VIEWER_USED="" ;;
-        vncviewer) vncviewer "localhost::$VNC_PORT" >/dev/null 2>&1 & add_pid $! viewer ;;
-        remmina) remmina -c "vnc://localhost:$VNC_PORT" >/dev/null 2>&1 & add_pid $! viewer ;;
-        *) $VIEWER "vnc://localhost:$VNC_PORT" >/dev/null 2>&1 & add_pid $! viewer ;;
-    esac
+    [ "$SCREEN" = native ] || start_viewer
 
     step "Services"
     SERVICES=$(echo $SERVICES)
@@ -322,9 +318,9 @@ EOF
         start_line=$(wc -l <"$LOG_DIR/qtcar.log")
         event "qtcar start"
         if [ "$VERBOSE" = 1 ]; then
-            sudo chroot "$CHROOT" /bin/sh /startup.sh </dev/null > >(tee -a "$LOG_DIR/qtcar.log") 2>&1 &
+            run_startup </dev/null > >(tee -a "$LOG_DIR/qtcar.log") 2>&1 &
         else
-            sudo chroot "$CHROOT" /bin/sh /startup.sh </dev/null >>"$LOG_DIR/qtcar.log" 2>&1 &
+            run_startup </dev/null >>"$LOG_DIR/qtcar.log" 2>&1 &
         fi
         wait $!
         status=$?
@@ -451,4 +447,80 @@ start_helpers() {
         python3 vehicle/tesla-gps.py -q --rootfs "$CHROOT" "${gps_args[@]}" </dev/null >"$LOG_DIR/gps.log" 2>&1 &
         add_pid $! tesla-gps
     fi
+}
+
+# /startup.sh in the chroot, with the display QtCar uses (QTCAR_* are read by the kit's startup.sh)
+run_startup() {
+    sudo chroot "$CHROOT" /bin/sh -c 'QTCAR_DISPLAY=$1 QTCAR_XAUTHORITY=$2 QTCAR_ARGS=$3
+        export QTCAR_DISPLAY QTCAR_XAUTHORITY QTCAR_ARGS; exec /bin/sh /startup.sh' \
+        _ "$QT_DISPLAY" "${QT_XAUTH:-/root/.Xauthority}" "$QTCAR_ARGS"
+}
+
+# the virtual screen (Xvfb :1) and x11vnc
+start_screen_vnc() {
+    step "Screen and VNC"
+    QT_DISPLAY=$DISPLAY_NUM
+    if xdpyinfo -display $DISPLAY_NUM >/dev/null 2>&1; then
+        info "X display $DISPLAY_NUM already running, using it"
+    else
+        Xvfb $DISPLAY_NUM -screen 0 "${SIZE}x24" +extension RECORD -nolisten tcp 2>"$LOG_DIR/xvfb.log" &
+        add_pid $! Xvfb
+        for _ in $(seq 50); do xdpyinfo -display $DISPLAY_NUM >/dev/null 2>&1 && break; sleep 0.1; done
+    fi
+    local vnc_access=(-localhost -nopw)
+    [ "$REMOTE" = 1 ] && vnc_access=(-usepw)
+    x11vnc -display $DISPLAY_NUM "${vnc_access[@]}" -rfbport "$VNC_PORT" -forever -shared -noxdamage -quiet \
+        >"$LOG_DIR/x11vnc.log" 2>&1 &
+    add_pid $! x11vnc
+}
+
+# the real screen: QtCar's UI (SIZE, 1920x1200) scaled to fit the panel with black bars. The X
+# framebuffer becomes SIZE and the output gets a transform (scale + centering offset); xrandr
+# complains that the offset output doesn't fit the framebuffer, but applies it.
+start_screen_native() {
+    step "Screen (native, $NATIVE_DISPLAY)"
+    QT_DISPLAY=$NATIVE_DISPLAY
+    local out ui_w=${SIZE%x*} ui_h=${SIZE#*x} pw ph tf
+    out=$(native_output)
+    NATIVE_OUT=${out%%$'\t'*} PANEL=${out#*$'\t'}
+    [ -n "$NATIVE_OUT" ] || die "no connected output on $NATIVE_DISPLAY (xrandr)"
+    pw=${PANEL%x*} ph=${PANEL#*x}
+    echo "NATIVE=$NATIVE_DISPLAY" >>"$LOG_DIR/state"
+    if [ "$PANEL" != "$SIZE" ]; then
+        tf=$(python3 -c "
+uw, uh, pw, ph = $ui_w, $ui_h, $pw, $ph
+s = max(uw / pw, uh / ph)                      # framebuffer pixels per panel pixel
+print('%f,0,%f,0,%f,%f,0,0,1' % (s, -(pw - uw / s) / 2 * s, s, -(ph - uh / s) / 2 * s))")
+        DISPLAY=$NATIVE_DISPLAY xrandr --output "$NATIVE_OUT" --fb "$SIZE" --transform "$tf" 2>/dev/null
+        echo "NATIVE_RESTORE=--output $NATIVE_OUT --transform none --fb $PANEL" >>"$LOG_DIR/state"
+        info "$NATIVE_OUT is $PANEL: the UI ($SIZE) is scaled to fit, with black bars"
+    fi
+    DISPLAY=$NATIVE_DISPLAY xset s off -dpms 2>/dev/null
+    # QtCar (user tesla in the chroot) needs the session's X cookie
+    local cookie=$CHROOT/tmp/qtcar-xauth
+    sudo rm -f "$cookie"
+    xauth -f "${XAUTHORITY:-$HOME/.Xauthority}" nlist "$NATIVE_DISPLAY" 2>/dev/null | sed 's/^..../ffff/' |
+        sudo xauth -q -f "$cookie" nmerge - 2>/dev/null
+    sudo touch "$cookie" && sudo chmod 644 "$cookie"
+    QT_XAUTH=/tmp/qtcar-xauth
+    # the touchscreen, passed through by tesla-touch (mouse mode if there is none)
+    local ts
+    if [ "$TOUCH_DEVICE" = auto ]; then ts=$(find_touchscreen); else ts=$TOUCH_DEVICE; fi
+    TOUCH_FROM=${ts%%$'\t'*}
+    if [ -n "$TOUCH_FROM" ]; then info "touchscreen: ${ts//$'\t'/ }"
+    else info "no touchscreen found: the mouse works as one finger"; fi
+}
+
+start_viewer() {
+    if [ -z "$VIEWER" ]; then
+        for v in krdc remote-viewer remmina vncviewer; do command -v $v >/dev/null && VIEWER=$v && break; done
+    fi
+    VIEWER_USED=${VIEWER:-}
+    case "${VIEWER:-none}" in
+        none) VIEWER_USED="" ;;
+        vncviewer) vncviewer "localhost::$VNC_PORT" >/dev/null 2>&1 & add_pid $! viewer ;;
+        remmina) remmina -c "vnc://localhost:$VNC_PORT" >/dev/null 2>&1 & add_pid $! viewer ;;
+        *) $VIEWER "vnc://localhost:$VNC_PORT" >/dev/null 2>&1 & add_pid $! viewer ;;
+    esac
+
 }

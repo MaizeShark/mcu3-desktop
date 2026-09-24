@@ -24,7 +24,7 @@ die()  { printf '%sError:%s %s\n' "$RED" "$R0" "$*" >&2; exit 1; }
 # defaults < tesla.conf < environment < command line. CONF_SRC[var] says where a value came from.
 CONF_VARS=(VEHICLE VEHICLE_COLOR VEHICLE_WHEELS VEHICLE_PERFORMANCE GPS AUDIO AUDIO_REMIX MUSIC
            CAMERA CAMERA_DEV CAMERA_SIZE NAV SERVICES SIZE VIEWER REMOTE VNC_PORT PANEL_PORT RESTART
-           IMAGE CHROOT)
+           IMAGE CHROOT SCREEN NATIVE_DISPLAY TOUCH_DEVICE QTCAR_ARGS)
 PATH_VARS=" MUSIC IMAGE CHROOT "    # relative paths: to the caller's directory (env, command line)
 declare -A CONF_SRC
 
@@ -34,6 +34,7 @@ set_defaults() {
     MUSIC="" CAMERA="" CAMERA_DEV=/dev/video32 CAMERA_SIZE=1280x960 NAV=1 SERVICES=""
     SIZE=1920x1200 VIEWER="" REMOTE=0 VNC_PORT=5900 PANEL_PORT=8099 RESTART=1
     IMAGE=./mcu3-new.ext4 CHROOT=./chroot
+    SCREEN=vnc NATIVE_DISPLAY=:0 TOUCH_DEVICE=auto QTCAR_ARGS=""
 }
 
 # abspath <path> <base dir>: ~ and relative paths resolved against the base dir
@@ -91,6 +92,12 @@ set_opt() {
     case "$PATH_VARS" in *" $v "*) val=$(abspath "$val" "$CALLER_PWD") ;; esac
     printf -v "$v" '%s' "$val"
     CONF_SRC[$v]="command line"
+}
+
+# sudo_auth: make sure sudo works now. With NOPASSWD (e.g. a live system) `sudo -v` can still ask
+# for a password (it checks all of the user's rules), so try without one first.
+sudo_auth() {
+    sudo -n true 2>/dev/null || sudo -v
 }
 
 # --- The running instance --------------------------------------------------------------------
@@ -196,6 +203,17 @@ teardown() {
         # root helpers (tesla-touch) need sudo; kill both ways
         kill $pids 2>/dev/null; sudo kill $pids 2>/dev/null
     fi
+    # native screen: the touchscreen's access for QtCar's user, the screensaver
+    local touch_acl native_display
+    touch_acl=$(sed -n 's/^TOUCH_ACL=//p' "$dir/state" 2>/dev/null)
+    native_display=$(sed -n 's/^NATIVE=//p' "$dir/state" 2>/dev/null)
+    [ -n "$touch_acl" ] && sudo setfacl -x u:1111 "$touch_acl" 2>/dev/null
+    if [ -n "$native_display" ]; then
+        DISPLAY=$native_display xset s default +dpms 2>/dev/null
+        local restore
+        restore=$(sed -n 's/^NATIVE_RESTORE=//p' "$dir/state" 2>/dev/null)
+        [ -n "$restore" ] && DISPLAY=$native_display xrandr $restore 2>/dev/null
+    fi
     # children of the helper loops (their loop may be gone already). The [x] keeps the pattern
     # from matching the command line of pkill's own sudo.
     pkill -f 'arecord -q -D hw:CARD=model[3]' 2>/dev/null
@@ -224,3 +242,29 @@ image_file() {
 }
 
 kit_stamp() { image_file etc/mcu3-patchkit; }
+
+# native_output: "OUTPUT<TAB>WxH" of the first connected output of $NATIVE_DISPLAY with a mode.
+# The size is the panel's own mode, not a scaled framebuffer.
+native_output() {
+    DISPLAY=$NATIVE_DISPLAY xrandr --current 2>/dev/null |
+        awk '/ connected/ {out=$1} out && /\*/ {print out "\t" $1; exit}'
+}
+
+# find_touchscreen: "/dev/input/eventN<TAB>name" of the first touchscreen: a multitouch device
+# (ABS_MT_POSITION_X, bit 53) with INPUT_PROP_DIRECT (it's the screen; a touchpad is "pointer")
+find_touchscreen() {
+    python3 - <<'PY'
+import re
+for block in open("/proc/bus/input/devices").read().split("\n\n"):
+    name = re.search(r'N: Name="(.*)"', block)
+    ev = re.search(r"H: Handlers=.*\b(event\d+)", block)
+    prop = re.search(r"B: PROP=(\w+)", block)
+    absb = re.search(r"B: ABS=([\w ]+)", block)
+    if not (name and ev and prop and absb):
+        continue
+    words = absb.group(1).split()
+    if int(prop.group(1), 16) & 2 and int(words[-1], 16) >> 53 & 1:
+        print("/dev/input/%s\t%s" % (ev.group(1), name.group(1)))
+        break
+PY
+}

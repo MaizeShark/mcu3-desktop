@@ -47,6 +47,7 @@ Touch: left click / drag = finger, mouse wheel = pinch zoom, right click = long 
 | Feature | Switch |
 |---|---|
 | The UI with touch: all apps and settings, the 3D car, the browser (Chrome 73), fireplace / dog mode / HAL 9000 | always |
+| On the PC's own screen, a touchscreen passed through (tested on a touch laptop with a live system) | `--native` |
 | Offline navigation: routing and turn-by-turn on OpenStreetMap tiles; address search (Google, online) | maps installed |
 | Vehicle data: battery, gear, speed, doors, locks, charging, lights, tires, telltales; the UI's buttons work; a web panel to change it all; the car's color and wheels | `--vehicle` |
 | GPS: a position, a route to drive, or a real receiver | `--gps` |

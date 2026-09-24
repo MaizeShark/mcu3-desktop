@@ -51,8 +51,19 @@
 
 # --- Screen and access -------------------------------------------------------------------------
 
-# Screen size of the virtual display. Option: --size WxH
+# Where QtCar shows up: "vnc" (a virtual screen, watched with a VNC viewer) or "native" (this
+# PC's own screen: fullscreen, scaled to fit with black bars, a touchscreen passed through; run it
+# from the desktop session). Options: --vnc, --native
+#SCREEN=vnc
+# native: the X display, and the touchscreen (auto = the first one found; without one the mouse
+# works as a finger). Option: --touch-device DEV
+#NATIVE_DISPLAY=:0
+#TOUCH_DEVICE=auto
+
+# The UI's size (the car's screen is 1920x1200). Option: --size WxH
 #SIZE=1920x1200
+# More QtCar options, e.g. --prod. Option: --qtcar-args "..."
+#QTCAR_ARGS=
 # VNC viewer to open: krdc, remote-viewer, remmina, vncviewer or "none" (empty = the first one
 # installed). Option: --viewer CMD
 #VIEWER=

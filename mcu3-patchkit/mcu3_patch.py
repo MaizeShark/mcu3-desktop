@@ -301,10 +301,11 @@ if ! grep -qs 'escalator-loo[p]' /proc/[0-9]*/cmdline; then  # [p]: don't match 
 fi
 for i in $(seq 50); do [ -S /tmp/escalator ] && break; sleep 0.1; done
 
-# Launch
+# Launch. ./tesla start passes QTCAR_DISPLAY, QTCAR_XAUTHORITY (native mode: the real screen)
+# and QTCAR_ARGS (e.g. --size WxH for a screen that isn't 1920x1200).
 su tesla -c "cd /usr/tesla/UI/bin && \
-  DISPLAY=:1 \
-  XAUTHORITY=/root/.Xauthority \
+  DISPLAY=${QTCAR_DISPLAY:-:1} \
+  XAUTHORITY=${QTCAR_XAUTHORITY:-/root/.Xauthority} \
   LD_LIBRARY_PATH=/usr/tesla/UI/lib:/usr/cid-lib:/usr/lib64:/lib64:/lib:/usr/lib \
   LC_ALL=C LANG=C LANGUAGE=C \
   QT_X11_NO_MITSHM=1 \
@@ -312,7 +313,7 @@ su tesla -c "cd /usr/tesla/UI/bin && \
   LD_PRELOAD=/usr/lib/icu_preload.so:/usr/lib/egl_pixmap_shim.so:/usr/lib/cef_nosandbox.so \
   EGL_PIXMAP_SHIM_DEBUG=1 \
   CEF_SHIM_DEBUG=1 CEF_LOG_SEVERITY=warning CEF_REMOTE_DEBUGGING_PORT=9222 \
-  ./QtCar --touch evdev,autorange"
+  ./QtCar --touch evdev,autorange $QTCAR_ARGS"
 '''
 
 # Car config keys the kit sets in settings.conf. Only these keys are touched; other settings
@@ -730,6 +731,7 @@ def fetch_payload(rel, want):
             subprocess.run(cmd, check=True)
         except (OSError, subprocess.CalledProcessError) as e:
             raise FetchError(f'build failed ({e})')
+        check_glibc(out)
         return
 
     entry = load_sources().get(rel, {})
@@ -745,6 +747,21 @@ def fetch_payload(rel, want):
     with open(out, 'wb') as f:
         f.write(data)
     print(f'            fetched {rel} from {url}')
+
+
+def check_glibc(path, limit=(2, 22)):
+    """The firmware has glibc 2.22: a shim built on a newer host must not need newer symbol
+    versions (e.g. __isoc23_strtol@GLIBC_2.38), or it won't load in the chroot."""
+    try:
+        out = subprocess.run(['objdump', '-T', path], capture_output=True, text=True).stdout
+    except OSError:
+        return      # no objdump: can't check
+    newer = sorted({v for v in re.findall(r'GLIBC_(\d+\.\d+)', out)
+                    if tuple(map(int, v.split('.'))) > limit}, key=lambda v: tuple(map(int, v.split('.'))))
+    if newer:
+        os.unlink(path)
+        raise FetchError(f'{os.path.basename(path)} needs GLIBC_{newer[-1]}, the firmware has 2.22 '
+                         f'(objdump -T shows which functions; see CLAUDE.md)')
 
 
 def load_sources():

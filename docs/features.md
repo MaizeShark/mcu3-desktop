@@ -19,6 +19,9 @@ in 3D, the map shows online tiles.
 - Limits: the "touchscreen unresponsive" alert can show without touch. The UI assumes a car that
   answers; without `--vehicle` it shows "no car" states.
 
+**Native screen** (`--native`): the same on the PC's own screen, scaled to fit with black bars,
+with a real touchscreen passed through (see [usage.md](usage.md#on-the-pcs-own-screen-native)).
+
 ## Browser
 
 Always on: the Web app is Tesla's Chromium Embedded Framework build (Chrome 73).

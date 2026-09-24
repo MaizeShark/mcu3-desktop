@@ -6,8 +6,10 @@
 //!   right button = long press
 //!
 //! Input is captured on the X display itself, so any VNC client on any host OS works.
+//! With --from, a real touchscreen is passed through instead (mapped to a letterboxed UI).
 
 mod cursor;
+mod passthrough;
 mod record;
 mod touch;
 
@@ -37,6 +39,10 @@ Usage: tesla-touch [options]
                     unmounted again on exit. Needs root.
   --name NAME       input device name                           [default: cyttsp6_mt]
   --long-press MS   duration of a right-click long press        [default: 800]
+  --from DEV        pass a real touchscreen through instead of the X mouse (e.g.
+                    /dev/input/event5). It's grabbed, so the desktop doesn't see its touches.
+  --panel WxH       with --from: the panel's pixel size. The UI (--size, default 1920x1200)
+                    is shown scaled to fit with black bars; touches are mapped to it.
   --no-cursor       don't force a visible arrow cursor
   -v, --verbose     log every touch frame
   -h, --help
@@ -50,6 +56,14 @@ struct Args {
     long_press: Duration,
     cursor: bool,
     verbose: bool,
+    from: Option<PathBuf>,
+    panel: Option<(i32, i32)>,
+}
+
+fn parse_size(v: &str, opt: &str) -> Result<(i32, i32), String> {
+    let bad = || format!("{opt} must look like 1920x1200");
+    let (w, h) = v.split_once('x').ok_or_else(bad)?;
+    Ok((w.parse().map_err(|_| bad())?, h.parse().map_err(|_| bad())?))
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -61,6 +75,8 @@ fn parse_args() -> Result<Args, String> {
         long_press: Duration::from_millis(800),
         cursor: true,
         verbose: false,
+        from: None,
+        panel: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -79,6 +95,8 @@ fn parse_args() -> Result<Args, String> {
                 let ms = value()?.parse().map_err(|_| "bad --long-press")?;
                 a.long_press = Duration::from_millis(ms);
             }
+            "--from" => a.from = Some(value()?.into()),
+            "--panel" => a.panel = Some(parse_size(&value()?, "--panel")?),
             "--no-cursor" => a.cursor = false,
             "-v" | "--verbose" => a.verbose = true,
             "-h" | "--help" => {
@@ -106,9 +124,15 @@ fn main() {
 }
 
 fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
-    let (width, height) = match args.size {
-        Some(size) => size,
-        None => screen_size(&args.display)?,
+    let (width, height) = match (args.size, &args.from) {
+        (Some(size), _) => size,
+        (None, Some(_)) => (1920, 1200),
+        (None, None) => screen_size(&args.display)?,
+    };
+    // --from: open (and grab) the real touchscreen before creating ours
+    let source = match &args.from {
+        Some(path) => Some(passthrough::open(path).map_err(|e| format!("{}: {e}", path.display()))?),
+        None => None,
     };
 
     let mut ts = TouchScreen::new(&args.name, width, height)?;
@@ -136,6 +160,52 @@ fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
         }
         None => None,
     };
+
+    if let Some((dev, name)) = source {
+        let panel = args.panel.unwrap_or((width, height));
+        let lb = passthrough::Letterbox::fit(width, height, panel.0, panel.1);
+        let (tx, rx) = mpsc::channel();
+        {
+            let tx = tx.clone();
+            ctrlc::set_handler(move || {
+                let _ = tx.send(passthrough::Event::Quit);
+            })?;
+        }
+        std::thread::spawn(move || passthrough::run(dev, panel, lb, tx));
+        println!(
+            "ready: {} ({width}x{height}) from {} \"{name}\", panel {}x{}",
+            node.display(),
+            args.from.as_ref().unwrap().display(),
+            panel.0,
+            panel.1
+        );
+        io::stdout().flush()?;
+        let mut result = Ok(());
+        loop {
+            match rx.recv() {
+                Ok(passthrough::Event::Frame(frame)) => {
+                    if args.verbose {
+                        eprintln!("frame {frame:?}");
+                    }
+                    ts.set(&frame)?;
+                }
+                Ok(passthrough::Event::Error(e)) => {
+                    result = Err(e);
+                    break;
+                }
+                Ok(passthrough::Event::Quit) | Err(_) => break,
+            }
+        }
+        let _ = ts.release_all();
+        if let Some(target) = bound {
+            unmount(&target);
+        }
+        eprintln!("tesla-touch: stopped");
+        if let Err(e) = result {
+            return Err(e.into());
+        }
+        std::process::exit(0);
+    }
 
     let (tx, rx) = mpsc::channel();
     {

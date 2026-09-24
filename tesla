@@ -58,7 +58,7 @@ cmd_stop() {
     [ -n "$(helper_pids "$dir/pids")" ] && left="$left helpers"
     [ -n "$(mounts_below)" ] && left="$left mounts"
     if [ -n "$left" ] || [ "$forced" = 1 ]; then
-        sudo -v || exit 1
+        sudo_auth || exit 1
         say "Cleaning up what's left of an earlier run (${left# }):"
         teardown "$dir"
     fi
@@ -85,7 +85,11 @@ cmd_status() {
         local t0
         t0=$(head -1 "$dir/events.log" 2>/dev/null | cut -d' ' -f1)
         say "${B}Running$R0 since $(date -d "@${t0:-0}" '+%F %T') (pid $pid), logs ${dir#"$TESLA_DIR/"}/"
-        say "  VNC       localhost:$(sed -n 's/^VNC_PORT=//p' "$dir/state")"
+        if grep -q '^SCREEN=native' "$dir/state"; then
+            say "  Screen    native $(sed -n 's/^NATIVE=//p' "$dir/state")"
+        else
+            say "  VNC       localhost:$(sed -n 's/^VNC_PORT=//p' "$dir/state")"
+        fi
         grep -q '^VEHICLE=1' "$dir/state" && say "  Panel     http://localhost:$(sed -n 's/^PANEL_PORT=//p' "$dir/state")/"
         python3 tools/logsummary.py --status "$dir"
     else

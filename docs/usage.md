@@ -66,7 +66,10 @@ defaults < `tesla.conf` < environment variables of the same name < command line 
 | | `CAMERA_DEV=/dev/video32`, `CAMERA_SIZE=1280x960` | the device QtCar reads, the picture size |
 | `--nav` / `--no-nav` | `NAV=1` | offline navigation (when maps are installed) |
 | `--services "A B"` | `SERVICES=` | more firmware services (`./tesla services`) |
-| `--size WxH` | `SIZE=1920x1200` | screen size |
+| `--native` / `--vnc` | `SCREEN=vnc` | QtCar on this PC's own screen (see below) or on a virtual screen over VNC |
+| `--touch-device DEV` | `TOUCH_DEVICE=auto`, `NATIVE_DISPLAY=:0` | native: the touchscreen and the X display |
+| `--size WxH` | `SIZE=1920x1200` | the UI's size (the car's screen) |
+| `--qtcar-args "..."` | `QTCAR_ARGS=` | more QtCar options |
 | `--viewer CMD` | `VIEWER=` | VNC viewer; empty = the first of krdc, remote-viewer, remmina, vncviewer; `none` |
 | `--remote` | `REMOTE=0` | VNC (with a password) and the panel reachable from the network |
 | | `VNC_PORT=5900`, `PANEL_PORT=8099` | ports |
@@ -91,6 +94,23 @@ The UI runs on a virtual display (Xvfb `:1`) and is shown over VNC on `localhost
 - **From another machine:** `ssh -L 5901:localhost:5900 <this-pc>`, then connect to
   `localhost:5901` (macOS: Screen Sharing, `open vnc://localhost:5901`). Or `--remote` with a
   password set once by `x11vnc -storepasswd`.
+
+## On the PC's own screen (native)
+
+`./tesla start --native`, run from the desktop session (or with `NATIVE_DISPLAY`/`XAUTHORITY`
+pointing at it): QtCar opens fullscreen on the real screen, no Xvfb, VNC or viewer.
+
+- **Scaling:** the UI is 1920x1200 like the car's screen. On a panel with another size the X
+  screen is set to 1920x1200 and scaled to fit (`xrandr --transform`), with black bars; the
+  original setting comes back when it stops.
+- **Touch:** the first touchscreen (a multitouch device marked as direct) is grabbed and passed
+  through by `tesla-touch --from`, mapped to the letterboxed UI; real multitouch works (pinch).
+  The desktop doesn't see those touches while it runs. Without a touchscreen, the mouse works as
+  one finger, as over VNC.
+- The screensaver is off while it runs. Stop with `./tesla stop` from another terminal (or
+  Ctrl+C in the start terminal, Alt+Tab to reach it).
+- Tested on a ThinkPad T480 (1920x1080 touch panel) with a Debian 13 live system: the whole
+  thing ran from RAM, `./tesla build-image` on the laptop, no install needed besides the tools.
 
 ## The web panel
 

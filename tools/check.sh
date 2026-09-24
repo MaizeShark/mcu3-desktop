@@ -31,16 +31,33 @@ tool() {
 }
 
 check_host() {
-    tool fail Xvfb xvfb "virtual screen"
-    tool fail x11vnc x11vnc "VNC server"
-    tool fail xdpyinfo x11-utils "waits for the screen"
+    if [ "$SCREEN" = native ]; then
+        tool fail xrandr x11-xserver-utils "native screen: size and scaling"
+        tool fail xauth xauth "native screen: access for QtCar"
+        tool fail xdpyinfo x11-utils "native screen"
+        if DISPLAY=$NATIVE_DISPLAY xdpyinfo >/dev/null 2>&1; then
+            chk ok "native screen $NATIVE_DISPLAY ($(native_output | cut -f2))"
+        else
+            chk fail "can't open the X display $NATIVE_DISPLAY" "run it from the desktop session, or set NATIVE_DISPLAY / XAUTHORITY"
+        fi
+        local ts
+        if [ "$TOUCH_DEVICE" = auto ]; then ts=$(find_touchscreen); else ts="$TOUCH_DEVICE"; fi
+        if [ -n "$ts" ]; then chk ok "touchscreen: ${ts//$'\t'/ }"
+        else chk warn "no touchscreen found: the mouse works as one finger (tesla-touch mouse mode)"; fi
+    else
+        tool fail Xvfb xvfb "virtual screen"
+        tool fail x11vnc x11vnc "VNC server"
+        tool fail xdpyinfo x11-utils "waits for the screen"
+    fi
     tool fail curl curl "talks to QtCar"
     if python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
         chk ok "python3 $(python3 -c 'import platform; print(platform.python_version())')"
     else
         chk fail "python3 3.11 or newer missing" "vehicle/, the kit and the log summary need it"
     fi
-    if [ "$VIEWER" = none ]; then
+    if [ "$SCREEN" = native ]; then
+        :
+    elif [ "$VIEWER" = none ]; then
         chk off "VNC viewer: none (VIEWER=none)"
     else
         local v found=""

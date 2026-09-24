@@ -154,16 +154,16 @@ cmd_build_image() {
             podman ps -q 2>/dev/null | grep -q . && warn "podman containers run; the sandbox may see a mix of old and new files"
             update_root "$TESLA_DIR/sandbox/rootfs" "" ;;
         check)
-            sudo -v || exit 1
+            sudo_auth || exit 1
             with_image check_root ;;
         update)
-            sudo -v || exit 1
+            sudo_auth || exit 1
             [ -z "$(mounts_below)" ] || die "things are mounted inside $CHROOT (an earlier run?): ./tesla stop"
             with_image update_root || exit 1
             echo
             say "Image up to date. ./tesla check shows the version." ;;
         fresh)
-            sudo -v || exit 1
+            sudo_auth || exit 1
             build_fresh ;;
     esac
 }
