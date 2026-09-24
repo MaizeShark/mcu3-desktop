@@ -176,6 +176,9 @@ BINARIES = [
 PAYLOAD_FILES = [
     # Mesa 18.0.5 swrast (Ubuntu) replaces Tesla's GL stack, which does not work on Xvfb
     ('mesa', 'usr/lib/dri/swrast_dri.so', 0o644, 'e79ef300403a067005be6480841930965d8d7e64'),
+    # Intel GPUs (./tesla start --native): the firmware's own i965 is Mesa 11.2.2 (2016), which
+    # knows the car's Apollo Lake but not newer GPUs such as Kaby Lake. Mesa 18.0.5's knows them.
+    ('mesa', 'usr/lib/dri/i965_dri.so', 0o644, 'c9d25e4f047893cd423d11cba4379db278c50570'),
     ('mesa', 'usr/lib/libglapi.so.0.0.0', 0o755, '17173722ee272789ff970d1ea45cb0694a5c27c9'),
     ('mesa', 'usr/lib/libdrm.so.2.4.0', 0o644, '20611823a72925941768e3c50844ffa42f811913'),
     ('mesa', 'usr/lib/libdrm_intel.so.1.0.0', 0o644, '8e3131c329c05700c3611c2cb73523ad830456a8'),
@@ -301,6 +304,14 @@ if ! grep -qs 'escalator-loo[p]' /proc/[0-9]*/cmdline; then  # [p]: don't match 
 fi
 for i in $(seq 50); do [ -S /tmp/escalator ] && break; sleep 0.1; done
 
+# OpenGL: software (llvmpipe) unless ./tesla start passes QTCAR_GL=hardware (native screen with
+# a GPU). Then the driver is named, since the firmware's libGL (Mesa 11.2) doesn't know newer GPUs.
+if [ "$QTCAR_GL" = hardware ]; then
+    GL_ENV="MESA_LOADER_DRIVER_OVERRIDE=${QTCAR_GL_DRIVER:-i965}"
+else
+    GL_ENV="LIBGL_ALWAYS_SOFTWARE=1"
+fi
+
 # Launch. ./tesla start passes QTCAR_DISPLAY, QTCAR_XAUTHORITY (native mode: the real screen)
 # and QTCAR_ARGS (e.g. --size WxH for a screen that isn't 1920x1200).
 su tesla -c "cd /usr/tesla/UI/bin && \
@@ -309,7 +320,7 @@ su tesla -c "cd /usr/tesla/UI/bin && \
   LD_LIBRARY_PATH=/usr/tesla/UI/lib:/usr/cid-lib:/usr/lib64:/lib64:/lib:/usr/lib \
   LC_ALL=C LANG=C LANGUAGE=C \
   QT_X11_NO_MITSHM=1 \
-  LIBGL_ALWAYS_SOFTWARE=1 \
+  $GL_ENV \
   LD_PRELOAD=/usr/lib/icu_preload.so:/usr/lib/egl_pixmap_shim.so:/usr/lib/cef_nosandbox.so \
   EGL_PIXMAP_SHIM_DEBUG=1 \
   CEF_SHIM_DEBUG=1 CEF_LOG_SEVERITY=warning CEF_REMOTE_DEBUGGING_PORT=9222 \

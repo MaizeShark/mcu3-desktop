@@ -24,7 +24,7 @@ die()  { printf '%sError:%s %s\n' "$RED" "$R0" "$*" >&2; exit 1; }
 # defaults < tesla.conf < environment < command line. CONF_SRC[var] says where a value came from.
 CONF_VARS=(VEHICLE VEHICLE_COLOR VEHICLE_WHEELS VEHICLE_PERFORMANCE GPS AUDIO AUDIO_REMIX MUSIC
            CAMERA CAMERA_DEV CAMERA_SIZE NAV SERVICES SIZE VIEWER REMOTE VNC_PORT PANEL_PORT RESTART
-           IMAGE CHROOT SCREEN NATIVE_DISPLAY TOUCH_DEVICE QTCAR_ARGS)
+           IMAGE CHROOT SCREEN NATIVE_DISPLAY TOUCH_DEVICE QTCAR_ARGS GPU)
 PATH_VARS=" MUSIC IMAGE CHROOT "    # relative paths: to the caller's directory (env, command line)
 declare -A CONF_SRC
 
@@ -34,7 +34,7 @@ set_defaults() {
     MUSIC="" CAMERA="" CAMERA_DEV=/dev/video32 CAMERA_SIZE=1280x960 NAV=1 SERVICES=""
     SIZE=1920x1200 VIEWER="" REMOTE=0 VNC_PORT=5900 PANEL_PORT=8099 RESTART=1
     IMAGE=./mcu3-new.ext4 CHROOT=./chroot
-    SCREEN=vnc NATIVE_DISPLAY=:0 TOUCH_DEVICE=auto QTCAR_ARGS=""
+    SCREEN=vnc NATIVE_DISPLAY=:0 TOUCH_DEVICE=auto QTCAR_ARGS="" GPU=auto
 }
 
 # abspath <path> <base dir>: ~ and relative paths resolved against the base dir
@@ -205,9 +205,9 @@ teardown() {
     fi
     # native screen: the touchscreen's access for QtCar's user, the screensaver
     local touch_acl native_display
-    touch_acl=$(sed -n 's/^TOUCH_ACL=//p' "$dir/state" 2>/dev/null)
+    touch_acl=$(sed -n 's/^\(TOUCH_\)\?ACL=//p' "$dir/state" 2>/dev/null)
     native_display=$(sed -n 's/^NATIVE=//p' "$dir/state" 2>/dev/null)
-    [ -n "$touch_acl" ] && sudo setfacl -x u:1111 "$touch_acl" 2>/dev/null
+    for f in $touch_acl; do sudo setfacl -x u:1111 "$f" 2>/dev/null; done
     if [ -n "$native_display" ]; then
         DISPLAY=$native_display xset s default +dpms 2>/dev/null
         local restore

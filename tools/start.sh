@@ -28,6 +28,8 @@ Screen and access:
                          (without one the mouse is a finger). Run it in the desktop session.
   --vnc                  the virtual screen over VNC (default)
   --touch-device DEV     native: the touchscreen (default: found automatically)
+  --no-gpu, --gpu        native: OpenGL in software instead of on the GPU (default: the GPU when
+                         it's an Intel one, which the firmware's Mesa drivers support)
   --size WxH             the UI's size (default 1920x1200, the car's screen)
   --viewer CMD|none      VNC viewer to open (default: krdc, remote-viewer, remmina or vncviewer)
   --remote               VNC (password: x11vnc -storepasswd) and panel reachable from the network
@@ -80,6 +82,8 @@ parse_start_opts() {
             --viewer) set_opt VIEWER "$2"; shift ;;
             --remote) set_opt REMOTE 1 ;;
             --native) set_opt SCREEN native ;;
+            --gpu) set_opt GPU on ;;
+            --no-gpu) set_opt GPU off ;;
             --vnc) set_opt SCREEN vnc ;;
             --touch-device) set_opt TOUCH_DEVICE "$2"; shift ;;
             --qtcar-args) set_opt QTCAR_ARGS "$2"; shift ;;
@@ -165,7 +169,7 @@ print_summary() {
     [ -n "${VIEWER_USED:-}" ] && viewer_note=" (viewer: $VIEWER_USED)"
     if [ "$what" = Running ]; then step "$what$R0  ${DIM}(stop: Ctrl+C here, or ./tesla stop)$R0"; else step "$what"; fi
     if [ "$SCREEN" = native ]; then
-        info "Screen    native $NATIVE_DISPLAY${NATIVE_OUT:+ ($NATIVE_OUT $PANEL)}, touch: ${TOUCH_FROM:-mouse}"
+        info "Screen    native $NATIVE_DISPLAY${NATIVE_OUT:+ ($NATIVE_OUT $PANEL)}, touch: ${TOUCH_FROM:-mouse}, OpenGL: ${QT_GL:-software}"
     elif [ "$REMOTE" = 1 ]; then
         info "Screen    $SIZE, VNC on port $VNC_PORT of this machine, password protected$viewer_note"
     else
@@ -451,9 +455,9 @@ start_helpers() {
 
 # /startup.sh in the chroot, with the display QtCar uses (QTCAR_* are read by the kit's startup.sh)
 run_startup() {
-    sudo chroot "$CHROOT" /bin/sh -c 'QTCAR_DISPLAY=$1 QTCAR_XAUTHORITY=$2 QTCAR_ARGS=$3
-        export QTCAR_DISPLAY QTCAR_XAUTHORITY QTCAR_ARGS; exec /bin/sh /startup.sh' \
-        _ "$QT_DISPLAY" "${QT_XAUTH:-/root/.Xauthority}" "$QTCAR_ARGS"
+    sudo chroot "$CHROOT" /bin/sh -c 'QTCAR_DISPLAY=$1 QTCAR_XAUTHORITY=$2 QTCAR_ARGS=$3 QTCAR_GL=$4 QTCAR_GL_DRIVER=$5
+        export QTCAR_DISPLAY QTCAR_XAUTHORITY QTCAR_ARGS QTCAR_GL QTCAR_GL_DRIVER; exec /bin/sh /startup.sh' \
+        _ "$QT_DISPLAY" "${QT_XAUTH:-/root/.Xauthority}" "$QTCAR_ARGS" "${QT_GL:-software}" "${QT_GL_DRIVER:-}"
 }
 
 # the virtual screen (Xvfb :1) and x11vnc
@@ -509,6 +513,28 @@ print('%f,0,%f,0,%f,%f,0,0,1' % (s, -(pw - uw / s) / 2 * s, s, -(ph - uh / s) / 
     TOUCH_FROM=${ts%%$'\t'*}
     if [ -n "$TOUCH_FROM" ]; then info "touchscreen: ${ts//$'\t'/ }"
     else info "no touchscreen found: the mouse works as one finger"; fi
+    native_gpu
+}
+
+# OpenGL on the GPU (GPU=auto|on|off): the kit has Mesa 18's i965 for Intel GPUs. QtCar (user
+# tesla, uid 1111 in the chroot) gets /dev/dri and access to its nodes; removed again at the end.
+native_gpu() {
+    QT_GL=software QT_GL_DRIVER=""
+    [ "$GPU" = off ] && { info "OpenGL: software (--no-gpu)"; return; }
+    local card vendor
+    card=$(ls -d /sys/class/drm/renderD* 2>/dev/null | head -1)
+    vendor=$(cat "$card/device/vendor" 2>/dev/null)
+    if [ "$vendor" != 0x8086 ]; then
+        info "OpenGL: software (GPU ${vendor:-none}: only Intel GPUs have a driver in the firmware's Mesa)"
+        return
+    fi
+    sudo mkdir -p "$CHROOT/dev/dri" && sudo mount --bind /dev/dri "$CHROOT/dev/dri" || return
+    local f
+    for f in /dev/dri/card* /dev/dri/renderD*; do
+        sudo setfacl -m u:1111:rw "$f" && echo "ACL=$f" >>"$LOG_DIR/state"
+    done
+    QT_GL=hardware QT_GL_DRIVER=i965
+    info "OpenGL: GPU (Intel, i965)"
 }
 
 start_viewer() {

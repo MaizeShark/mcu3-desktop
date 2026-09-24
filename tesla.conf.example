@@ -59,6 +59,8 @@
 # works as a finger). Option: --touch-device DEV
 #NATIVE_DISPLAY=:0
 #TOUCH_DEVICE=auto
+# native: OpenGL on the GPU: auto (an Intel GPU), on, off (software). Options: --gpu, --no-gpu
+#GPU=auto
 
 # The UI's size (the car's screen is 1920x1200). Option: --size WxH
 #SIZE=1920x1200

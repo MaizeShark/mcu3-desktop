@@ -68,6 +68,7 @@ defaults < `tesla.conf` < environment variables of the same name < command line 
 | `--services "A B"` | `SERVICES=` | more firmware services (`./tesla services`) |
 | `--native` / `--vnc` | `SCREEN=vnc` | QtCar on this PC's own screen (see below) or on a virtual screen over VNC |
 | `--touch-device DEV` | `TOUCH_DEVICE=auto`, `NATIVE_DISPLAY=:0` | native: the touchscreen and the X display |
+| `--gpu` / `--no-gpu` | `GPU=auto` | native: OpenGL on the GPU (Intel) or in software |
 | `--size WxH` | `SIZE=1920x1200` | the UI's size (the car's screen) |
 | `--qtcar-args "..."` | `QTCAR_ARGS=` | more QtCar options |
 | `--viewer CMD` | `VIEWER=` | VNC viewer; empty = the first of krdc, remote-viewer, remmina, vncviewer; `none` |
@@ -107,6 +108,10 @@ pointing at it): QtCar opens fullscreen on the real screen, no Xvfb, VNC or view
   through by `tesla-touch --from`, mapped to the letterboxed UI; real multitouch works (pinch).
   The desktop doesn't see those touches while it runs. Without a touchscreen, the mouse works as
   one finger, as over VNC.
+- **GPU:** with an Intel GPU, OpenGL runs on it (`GPU=auto`; `--no-gpu` for software). The kit
+  installs Mesa 18.0.5's `i965` driver (the firmware's own is Mesa 11.2 from 2016 and doesn't know
+  newer Intel GPUs); `/dev/dri` is bound into the chroot. Other GPUs (AMD, NVIDIA) stay in
+  software for now.
 - The screensaver is off while it runs. Stop with `./tesla stop` from another terminal (or
   Ctrl+C in the start terminal, Alt+Tab to reach it).
 - Tested on a ThinkPad T480 (1920x1080 touch panel) with a Debian 13 live system: the whole

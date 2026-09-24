@@ -28,6 +28,11 @@ url    = "http://archive.ubuntu.com/ubuntu/pool/main/m/mesa/libgl1-mesa-dri_18.0
 sha256 = "db9064a801d63088db1ef9eacaf90c555c3efaa5f319ffd1d51330033c7026c4"
 member = "usr/lib/x86_64-linux-gnu/dri/r300_dri.so"
 
+["usr/lib/dri/i965_dri.so"]
+url    = "http://archive.ubuntu.com/ubuntu/pool/main/m/mesa/libgl1-mesa-dri_18.0.5-0ubuntu0~16.04.1_amd64.deb"
+sha256 = "db9064a801d63088db1ef9eacaf90c555c3efaa5f319ffd1d51330033c7026c4"
+member = "usr/lib/x86_64-linux-gnu/dri/i965_dri.so"
+
 ["usr/lib/libglapi.so.0.0.0"]
 url    = "http://archive.ubuntu.com/ubuntu/pool/main/m/mesa/libglapi-mesa_18.0.5-0ubuntu0~16.04.1_amd64.deb"
 sha256 = "bb306e135f9e5efc3ef6f18bbacfe93265bc40c9f724104d276cd465aa13b7d7"
