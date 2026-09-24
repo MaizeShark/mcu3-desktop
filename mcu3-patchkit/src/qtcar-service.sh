@@ -106,7 +106,7 @@ fi
 if [ "$JOB" = dbus ]; then
     mkdir -p /var/run/dbus
     rm -f /var/run/messagebus.pid /var/run/dbus/pid /var/run/dbus/system_bus_socket
-    echo "qtcar-service: dbus -> the firmware's system bus (/var/run/dbus)" >&2
+    echo "qtcar-service: dbus -> dbus-daemon --system (the firmware's own bus)" >&2
     exec /usr/bin/dbus-daemon --nofork --system
 fi
 if [ "$JOB" = bsa_server ]; then
