@@ -157,4 +157,6 @@ QCOPTS=$(echo " $QCOPTS " | sed -E 's/ --(gw|ip|ic|ap|lb) +[0-9.]+/ /g')
 
 cd "$TESLA_BIN" || exit 1
 echo "qtcar-service: $JOB -> $QCAPP $QCOPTS $* (user ${QCUSER:-root})" >&2
+# QCGROUPS is ":grp:grp" for most jobs, but "tesla" (no colon) for qtcar-bluetooth
+case "$QCGROUPS" in ""|:*) ;; *) QCGROUPS=":$QCGROUPS" ;; esac
 as_user "$QCUSER$QCGROUPS" "./$QCAPP" $QCOPTS "$@"
