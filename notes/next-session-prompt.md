@@ -25,21 +25,22 @@ scroll wheels (CAN signals -> qtcar-vehicle's uinput devices), MAME with COIN/ST
 wheels (XTest keys, focus by tools/game-windows.py). Still to check with the user: the game
 sound, the gamepad, VNC mode with the games, other MAME games.
 
+Done late in session 7: the patch kit went from 25 to 5 binary patches (retired ones are
+restored in existing images), the browser shows pages with --native, climate answers, TPMS
+warnings, the charging screen's energy added, AMD GPUs behind --gpu (untested). Details:
+notes/session7-2026-09-25.md.
+
 Open, roughly in order (ask before large restructurings):
-1. Bluetooth: music works ("Phone" in the Media app switches audiod to source 3 by itself,
-   confirmed). Calls: dialing works, the call audio (hands-free, microphone) is untested. The A2DP connect race (sometimes a second try).
-   A USB power cycle was needed once to revive the AX210; watch whether the vendor-command filter
-   and the reset on exit keep it away.
-2. The patch kit: remove the patches that do nothing (gui-escalator-*, gui-cgroup-exit-*, the
-   *-revert entries, the chrome-sandbox patches); try `--prod` (QTCAR_ARGS) instead of the assert
-   patches, with FEATURE_vectorMapTilesEnabled pinned off (prod mode leaves the map empty). Test on
-   the laptop (sudo works there). Existing images still carry the old bytes: handle that.
-3. A bootable stick: a script that builds a Debian (or Ubuntu: 1000 Hz tick) live image locally
+1. The browser takes no input: pages get no click/wheel/touch events (VNC and native). QtCar
+   uses ChromiumClient::sendMouseDown/Up/Move/Wheel; find out whether they're called (gdb in the
+   sandbox, sandbox.sh --browser -x) and where it stops.
+2. `./tesla arcade` (the user's idea): run just a game (BBR2) in the desktop's compositor, on
+   the GPU, without the full QtCar UI; the arcade over VNC makes no sense in software rendering.
+3. Bluetooth calls: the call audio (hands-free, microphone) is untested; the A2DP connect race.
+4. A bootable stick: a script that builds a Debian (or Ubuntu: 1000 Hz tick) live image locally
    from the user's own dump, booting straight into `./tesla start --native` (never distributable:
    it contains the firmware).
-4. Smaller: USB "Loading..." should be fixed by the audio_type change (verify); TPMS warnings;
-   "+0 mi" charge added; seat heaters / HVAC requests; AMD GPUs (radeonsi_dri.so -> the kit's
-   Gallium megadriver).
+5. Remaining audio dropouts in games follow the laptop's heat (session 7 notes).
 
 How to work: test in the sandbox or on the laptop first; the user runs sudo commands on this PC.
 Commit often, push to origin (the user's Forgejo); push to `github` only when asked, after
