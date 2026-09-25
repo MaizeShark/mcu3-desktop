@@ -92,6 +92,23 @@ timestamps to GpsManager otherwise; harmless so far), `--no-carconfig`, `--van`.
 | tire pressures | `SIM_tpmsPressureFL/FR/RL/RR` (bar) | `TPMS_pressureFL/...` | |
 | BRAKE / ESP telltales (rail on) | `IBST_iBoosterStatus` (0x39D), `DI_tcTelltaleOn` (0x2B6), both in `--preset parked` | `VAPI_telltaleBrakes`, `VAPI_telltaleESP` | amber BRAKE / ESP when missing |
 
+**Arcade** (tested 2026-09-25 on the laptop with Beach Buggy Racing 2 and Asteroids): while a
+game runs (`GUI_vehicleGameMode`), QtCarVehicle (`SteeringInputForwarder` in libQtCarVAPI) makes
+the uinput devices `game-steering` and `game-scroll-left`/`-right` and feeds them:
+
+| Set | QtCar data value | Game device |
+|---|---|---|
+| `SCCM_steeringAngle` (0x129, degrees, **right = positive**) | `VAPI_steeringAngle` | `game-steering` ABS_WHEEL = angle x 100; BBR2: full lock at 30° (`SteeringWheelExtent`), QtCar's top bar says "TOO MUCH RIGHT/LEFT" beyond |
+| `VCLEFT_brakePressed` (0x3C2) | `VAPI_brakePedal` (source `ETH_VCLEFT_brakePressed`) | `game-steering` brake key |
+| `VCLEFT_swcLeftTiltLeft` / `Pressed` / `TiltRight` (ON/OFF) | `STW_leftTop` / `Middle` / `Bottom` | `game-scroll-left` keys |
+| `VCLEFT_swcLeftScrollTicks` (signed, ticks per frame: they add up while set) | `STW_leftScroll` | `game-scroll-left` wheel |
+| the same for `swcRight*` | `STW_right*` | `game-scroll-right` |
+
+Not `DI_brakePedalState`, `IBST_driverBrakeApply` or `ESP_driverBrakeApply` (tried). Both
+messages are in the simulator's frames (merge mode writes the values in). In the MAME games
+QtCar turns the `STW_*` values into keys (XTest) itself. The panel's "Arcade controls" set these
+with `{"values": {...}, "quiet": true}` (no log line, no state in the reply).
+
 **Buttons in the UI** (frunk/trunk "OPEN", lock icon, charge port, light switch, fog lights):
 QtCarVehicle sends the requests as CAN frames to the gateway, UDP broadcast to **:4321** (header
 `bus << 12 | CAN id`, e.g. `0x4273` = bus 4, `UI_vehicleControl` 0x273). The sim ignores them, so

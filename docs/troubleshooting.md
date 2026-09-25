@@ -33,5 +33,8 @@ it). `config` in there shows the settings used. For a service that hangs or beha
 | Navigation: "maps missing" or no route | maps not installed (`./tesla check`); the destination is outside the installed region; online routing doesn't work |
 | A setting or car value doesn't stick | QtCar stores it in its settings DB in the image; `vehicle/qtcar-settings.py` edits it |
 | The host desktop reacts to touches | the udev rule for tesla-touch isn't installed (`./tesla check`) |
+| Arcade: Beach Buggy Racing 2 ignores taps | it renders in software and runs at a few frames a second (`/run/qtcar-sv/cobalt.log` in the image: "DRI2: could not open /dev/dri/card0"); hold a tap longer, or use `--native` with an Intel GPU |
+| Arcade: the car doesn't steer, "no device path found for game-steering" | start with `--vehicle` (qtcar-vehicle makes the device); the image needs the current kit (`./tesla build-image`) |
+| Arcade: a game window with a title bar, in the wrong place, or MAME ignores COIN/START | the window helper isn't running (`game-windows.log` in the run folder) |
 | QtCar restarts right after the start | normal once: it applies the car configuration and restarts itself (`events.log` gives the reason) |
 | Many ERROR lines in `qtcar.log` | normal: services, hardware and online servers that aren't there |

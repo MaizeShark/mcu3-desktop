@@ -10,7 +10,9 @@ State (end of session 6, 2026-09-24): QtCar, touch, all firmware services, offli
 fake GPS/vehicle data with a web panel, the browser, sound (AudioWeaver + audiod on snd-aloop),
 USB music from a folder, the backup camera (v4l2loopback) and the fireplace/dog mode/HAL videos
 all work in the real chroot. Session 6 replaced `start_all.sh` by the `./tesla` command
-(start/stop/status/check/logs/config/build-image, `tesla.conf`). Details: `notes/session6-*.md`.
+(start/stop/status/check/logs/config/build-image, `tesla.conf`). Session 7 (2026-09-25): every CAN
+signal on the web panel, and the arcade (Beach Buggy Racing 2, MAME) playable, tested with
+`--native` on the laptop. Details: `notes/session6-*.md`, `notes/session7-*.md`.
 
 ## Layout
 - `mcu3-original/`: pristine firmware dump, root-owned. Never modify it and never commit it.
@@ -25,6 +27,7 @@ all work in the real chroot. Session 6 replaced `start_all.sh` by the `./tesla` 
 - `vehicle/`: fake GPS (`tesla-gps.py`) and vehicle data (`tesla-can.py`, CAN signal DB from the
   firmware via `extract-can-db.py` into `vehicle/work/`, untracked), web panel (`panel.html`).
 - `tesla` + `tools/`: the user-facing command. `tools/common.sh` (config loading, teardown),
+  `game-windows.py` (takes the arcade's windows from a desktop window manager),
   `check.sh` (preflight checks), `start.sh` (what `start_all.sh` did), `logsummary.py` (also
   `service_status()` for `./tesla status` and the panel), `build-image.sh`. Settings:
   `tesla.conf` (untracked, from `tesla.conf.example`) < environment < options.

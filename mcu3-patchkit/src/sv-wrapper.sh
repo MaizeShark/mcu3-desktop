@@ -3,7 +3,7 @@
 # escalator starts some of them with "sv start <name>" (fireplace, dog mode, HAL 9000 videos).
 # There is no runsvdir in the chroot, so for those services this runs qtcar-service <name>
 # in the background instead; everything else goes to runit's sv (/sbin/sv.runit).
-#   sv start|up|u|stop|down|d|status <service>...
+#   sv start|up|u|stop|down|d|force-stop|status <service>...
 
 RUNDIR=/run/qtcar-sv
 handled() {
@@ -11,7 +11,8 @@ handled() {
     return 1
 }
 
-cmd=$1
+# the escalator's stop-mame runs "sv DOWN mame" (runit takes any case)
+cmd=$(echo "$1" | tr 'A-Z' 'a-z')
 [ $# -ge 2 ] || exec /sbin/sv.runit "$@"
 shift
 for s in "$@"; do handled "${s##*/}" || exec /sbin/sv.runit "$cmd" "$@"; done
@@ -31,7 +32,8 @@ for s in "$@"; do
                 echo $! >"$pidfile"
             fi
             echo "ok: run: $s" ;;
-        stop|down|d|exit|x|kill|k)
+        # force-stop: the escalator's stop-tesla-game-cobalt and stop-mame (Arcade -> EXIT)
+        stop|down|d|exit|x|kill|k|force-stop|force-shutdown)
             if [ "$running" = 1 ]; then
                 kill "$pid" 2>/dev/null
                 sleep 1

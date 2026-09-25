@@ -282,6 +282,9 @@ EOF
     # input_to_virtual and its device scan. Not all of /sys: it would cover the net_cls cgroup.
     sudo mount -t tmpfs -o mode=755,size=64k tmpfs "$CHROOT/dev/input"
     sudo touch "$CHROOT/dev/uinput" && sudo mount --bind /dev/uinput "$CHROOT/dev/uinput"
+    # QtCarVehicle (user tesla, uid 1111) makes the arcade's steering wheel and scroll wheel
+    # devices through it when a game starts ("game-scroll-left Unable to open input device")
+    sudo setfacl -m u:1111:rw /dev/uinput && echo "ACL=/dev/uinput" >>"$LOG_DIR/state"
     for d in class devices; do
         sudo mkdir -p "$CHROOT/sys/$d" && sudo mount --bind -o ro /sys/$d "$CHROOT/sys/$d"
     done
@@ -467,6 +470,11 @@ start_helpers() {
           done ) </dev/null >"$LOG_DIR/camera.log" 2>&1 &
         add_pid $! camera
     fi
+    # the arcade's game windows: the car has no window manager, a desktop has one (native screen);
+    # on Xvfb it only gives MAME the keyboard focus for QtCar's XTest keys
+    DISPLAY=$QT_DISPLAY python3 tools/game-windows.py --tidk "$CHROOT/tmp/games/cobalt/tidk" \
+        </dev/null >"$LOG_DIR/game-windows.log" 2>&1 &
+    add_pid $! game-windows
     if [ -n "$GPS" ]; then
         local gps_args
         case "$GPS" in -*) read -ra gps_args <<<"$GPS" ;; *) gps_args=(--pos "$GPS") ;; esac
@@ -540,7 +548,9 @@ print('%f,0,%f,0,%f,%f,0,0,1' % (s, -(pw - uw / s) / 2 * s, s, -(ph - uh / s) / 
 }
 
 # OpenGL on the GPU (GPU=auto|on|off): the kit has Mesa 18's i965 for Intel GPUs. QtCar (user
-# tesla, uid 1111 in the chroot) gets /dev/dri and access to its nodes; removed again at the end.
+# tesla, uid 1111 in the chroot) and the arcade games (cobalt 1226, mame 1980; in software they
+# run at a few frames a second and miss short taps) get /dev/dri and access to its nodes; removed
+# again at the end.
 native_gpu() {
     QT_GL=software QT_GL_DRIVER=""
     [ "$GPU" = off ] && { info "OpenGL: software (--no-gpu)"; return; }
@@ -554,7 +564,7 @@ native_gpu() {
     sudo mkdir -p "$CHROOT/dev/dri" && sudo mount --bind /dev/dri "$CHROOT/dev/dri" || return
     local f
     for f in /dev/dri/card* /dev/dri/renderD*; do
-        sudo setfacl -m u:1111:rw "$f" && echo "ACL=$f" >>"$LOG_DIR/state"
+        sudo setfacl -m u:1111:rw,u:1226:rw,u:1980:rw "$f" && echo "ACL=$f" >>"$LOG_DIR/state"
     done
     QT_GL=hardware QT_GL_DRIVER=i965
     info "OpenGL: GPU (Intel, i965)"

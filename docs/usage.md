@@ -129,6 +129,12 @@ With `--vehicle`: **http://localhost:8099/**
 - **Controls:** drive rail, gear, speed, battery; doors, frunk, trunk, lock; charging state,
   current, time to full; lights; turn signals, hazards, parking brake, seat belt; outside and
   inside temperature; tire pressures; any CAN signal by name.
+- **Arcade controls:** the steering wheel, brake pedal and scroll wheels for the Arcade (Beach
+  Buggy Racing 2 steers with the wheel; the MAME games use the scroll wheels). A slider that
+  springs back, a hold-to-brake button, both scroll wheels (tilt left, press, tilt right, scroll).
+  Keys after a click into the section (or with "keys anywhere"): ←/→ or A/D steer toward the
+  "full lock" angle (30° = full lock in BBR2), ↓/S/Space brake. A gamepad works too: left stick,
+  B or the left trigger.
 - **CAN signals:** all 379 messages and 8759 signals of the firmware's CAN database. Search by
   signal or message name, id (`0x118`), unit or enum label (several words: all must match);
   filters "on the wire" (ids seen since tesla-can.py started, with rate and sender:

@@ -207,7 +207,10 @@ teardown() {
     local touch_acl native_display
     touch_acl=$(sed -n 's/^\(TOUCH_\)\?ACL=//p' "$dir/state" 2>/dev/null)
     native_display=$(sed -n 's/^NATIVE=//p' "$dir/state" 2>/dev/null)
-    for f in $touch_acl; do sudo setfacl -x u:1111 "$f" 2>/dev/null; done
+    for f in $touch_acl; do
+        sudo setfacl -x u:1111 "$f" 2>/dev/null
+        case "$f" in /dev/dri/*) sudo setfacl -x u:1226 "$f"; sudo setfacl -x u:1980 "$f" ;; esac 2>/dev/null
+    done
     if [ -n "$native_display" ]; then
         DISPLAY=$native_display xset s default +dpms 2>/dev/null
         local restore

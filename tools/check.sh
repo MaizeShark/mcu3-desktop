@@ -74,8 +74,11 @@ check_host() {
     fi
     if [ -e /dev/uinput ]; then chk ok "/dev/uinput (touch)"
     else chk fail "/dev/uinput missing (touch)" "sudo modprobe uinput"; fi
-    if [ -f /etc/udev/rules.d/99-tesla-touch.rules ]; then
+    if cmp -s /etc/udev/rules.d/99-tesla-touch.rules "$TESLA_DIR/tesla-touch/99-tesla-touch.rules"; then
         chk ok "udev rule for tesla-touch"
+    elif [ -f /etc/udev/rules.d/99-tesla-touch.rules ]; then
+        chk warn "udev rule for tesla-touch is older than tesla-touch/99-tesla-touch.rules (arcade devices)" \
+            "sudo cp tesla-touch/99-tesla-touch.rules /etc/udev/rules.d/ && sudo udevadm control --reload"
     else
         chk warn "udev rule for tesla-touch not installed: the host desktop reacts to the virtual touchscreen too" \
             "sudo cp tesla-touch/99-tesla-touch.rules /etc/udev/rules.d/ && sudo udevadm control --reload"

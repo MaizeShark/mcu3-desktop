@@ -143,9 +143,13 @@ qtcar_env() {
 #         /home/mame/game (QtCar writes it)
 #   cobalt: Beach Buggy Racing 2 (/usr/bin/games/cobalt/CobaltLinux), window and car colour from
 #         /tmp/games/cobalt/tidk/TIDK_*; cobalt-input (input_to_virtual) turns /dev/input/touch into
-#         virtual steering/touch devices (uinput), which the game finds in /dev/input
+#         the virtual device game-touch (uinput), which the game finds in /dev/input
 case "$JOB" in mame|cobalt|cobalt-input)
     DISP=$(qtcar_env DISPLAY); XAUTH=$(qtcar_env XAUTHORITY)
+    # the game window's place and the car's colour etc., written by QtCar; input_to_virtual needs
+    # the window too (it maps the touches into it)
+    TIDK=""
+    for f in /tmp/games/cobalt/tidk/TIDK_*; do [ -f "$f" ] && TIDK="$TIDK ${f##*/}=$(cat "$f")"; done
     GLENV=""   # only what QtCar has: an empty MESA_LOADER_DRIVER_OVERRIDE would name driver ""
     for v in LIBGL_ALWAYS_SOFTWARE MESA_LOADER_DRIVER_OVERRIDE; do
         val=$(qtcar_env $v); [ -n "$val" ] && GLENV="$GLENV $v=$val"
@@ -168,22 +172,32 @@ if [ "$JOB" = cobalt-input ]; then
     echo "qtcar-service: cobalt-input -> input_to_virtual" >&2
     cd /usr/bin/games/cobalt || exit 1
     # as root: it needs /dev/uinput and /dev/input/touch (on the car its sandbox grants them)
-    exec env -i PATH="$PATH" LD_LIBRARY_PATH=/usr/bin/games/cobalt/ LC_ALL=C ./input_to_virtual
+    exec env -i PATH="$PATH" LD_LIBRARY_PATH=/usr/bin/games/cobalt/ $TIDK LC_ALL=C ./input_to_virtual
 fi
 if [ "$JOB" = cobalt ]; then
     mkdir -p /home/games/cobalt /tmp/games/cobalt /home/tesla/.Tesla/data/cobalt
     chown -hR cobalt:games /home/games/cobalt /tmp/games/cobalt /home/tesla/.Tesla/data/cobalt
-    TIDK=""
-    for f in /tmp/games/cobalt/tidk/TIDK_*; do [ -f "$f" ] && TIDK="$TIDK ${f##*/}=$(cat "$f")"; done
-    # the virtual input devices: input_to_virtual creates them through uinput; the chroot's /dev
-    # is the image's, so make their nodes (the game scans /dev/input and /sys/class/input)
+    # the virtual input devices, made through uinput: game-touch by input_to_virtual, game-steering
+    # and game-scroll-left/right by QtCarVehicle when GUI_vehicleGameMode turns on (from
+    # VAPI_steeringAngle, VAPI_brakePedal, STW_*). The game finds them by name in /sys/class/input;
+    # the chroot's /dev/input is a tmpfs, so make their nodes as they appear, while the game runs
+    # (this shell's pid becomes the game's: as_user execs). input_to_virtual ends with the game.
+    pkill -f '^\./input_to_virtual'
     /usr/local/bin/qtcar-service cobalt-input </dev/null >>/tmp/games/cobalt-input.log 2>&1 &
-    sleep 1
-    for d in /sys/class/input/event*; do
-        [ -r "$d/dev" ] || continue
-        n=/dev/input/${d##*/}; [ -e "$n" ] && continue
-        mknod "$n" c "$(cut -d: -f1 "$d/dev")" "$(cut -d: -f2 "$d/dev")" && chgrp games "$n" && chmod 660 "$n"
+    ( while kill -0 $$ 2>/dev/null; do
+        for d in /sys/class/input/event*; do
+            [ -r "$d/dev" ] || continue
+            n=/dev/input/${d##*/}; [ -e "$n" ] && continue
+            name=$(cat "$d/device/name" 2>/dev/null)
+            case "$name" in game-*) ;; *) continue ;; esac     # not the host's keyboard etc.
+            mknod "$n" c "$(cut -d: -f1 "$d/dev")" "$(cut -d: -f2 "$d/dev")" && chgrp games "$n" && chmod 660 "$n" &&
+                echo "qtcar-service: cobalt: $n = $name" >&2
+        done
+        sleep 0.5
     done
+    pkill -f '^\./input_to_virtual'
+    rm -f /dev/input/event* ) &      # the next game's devices may get other numbers
+    sleep 1
     echo "qtcar-service: cobalt -> CobaltLinux (DISPLAY ${DISP:-:1}, $TIDK)" >&2
     cd /usr/bin/games/cobalt || exit 1
     as_user cobalt:games env -i PATH="$PATH" HOME=/home/games/cobalt DISPLAY="${DISP:-:1}" XAUTHORITY="$XAUTH" \

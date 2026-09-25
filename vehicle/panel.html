@@ -75,6 +75,15 @@ input[type=text] { font: inherit; flex: 1; min-width: 160px; padding: 6px 8px; b
 #logs small { color: var(--muted); }
 #rundir { color: var(--muted); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 #msg.bad { color: var(--warn); }
+/* arcade controls */
+#steer { flex: 1; }
+.pad { display: grid; grid-template-columns: repeat(3, auto); gap: 4px; justify-content: start; }
+.pad button { min-width: 44px; }
+.pad + .pad { margin-left: 20px; }
+#brake.on, .pad button.on { background: var(--warn); border-color: var(--warn); color: #fff; }
+#brake { min-width: 120px; touch-action: none; user-select: none; }
+.hint { color: var(--muted); font-size: 12px; }
+kbd { font: 11px ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; background: var(--chip); }
 /* CAN signal browser */
 #can h2 small, #canstat { font-weight: 400; text-transform: none; letter-spacing: 0; }
 #canstat { color: var(--muted); font-size: 12px; }
@@ -205,6 +214,25 @@ input[type=text] { font: inherit; flex: 1; min-width: 160px; padding: 6px 8px; b
       <div class="row"><label>RL</label><input type="range" data-range="SIM_tpmsPressureRL" min="1" max="3.5" step="0.05" value="2.6"><span class="val"></span></div>
       <div class="row"><label>RR</label><input type="range" data-range="SIM_tpmsPressureRR" min="1" max="3.5" step="0.05" value="2.6"><span class="val"></span></div>
     </div>
+  </section>
+
+  <section class="wide" id="arcade">
+    <h2>Arcade controls <small class="hint" id="padstat"></small></h2>
+    <div class="hint">For the Arcade's Beach Buggy Racing 2: QtCarVehicle turns these into the game's steering wheel
+      and scroll wheel devices while a game runs. Keys (click here first, or tick the box):
+      <kbd>←</kbd><kbd>→</kbd> / <kbd>A</kbd><kbd>D</kbd> steer, <kbd>↓</kbd> / <kbd>S</kbd> / <kbd>Space</kbd> brake;
+      a gamepad works too (left stick, B / left trigger).</div>
+    <div class="row"><label>Steering</label><input type="range" id="steer" min="-90" max="90" step="1" value="0">
+      <span class="val" id="steerv">0°</span></div>
+    <div class="row"><label>Full lock</label><input type="range" id="lock" min="10" max="90" step="5" value="30">
+      <span class="val" id="lockv">30°</span></div>
+    <div class="row"><label>Brake pedal</label><button id="brake">hold to brake</button>
+      <label style="min-width:0"><input type="checkbox" id="keys"> keys anywhere on this page</label></div>
+    <div class="row"><label>Scroll wheels</label>
+      <span class="pad" data-wheel="Left" title="left scroll wheel"><button data-b="TiltLeft">◀</button><button data-b="Pressed">●</button><button data-b="TiltRight">▶</button>
+        <button data-s="-1">▼</button><span></span><button data-s="1">▲</button></span>
+      <span class="pad" data-wheel="Right" title="right scroll wheel"><button data-b="TiltLeft">◀</button><button data-b="Pressed">●</button><button data-b="TiltRight">▶</button>
+        <button data-s="-1">▼</button><span></span><button data-s="1">▲</button></span></div>
   </section>
 
   <section class="wide">
@@ -353,6 +381,107 @@ $("#rawset").onclick = () => {
 };
 $("#rawunset").onclick = () => post({ unset: rawPairs().map(p => p.split("=")[0]) });
 $("#raw").onkeydown = e => { if (e.key === "Enter") $("#rawset").click(); };
+
+// ---- Arcade controls: steering angle, brake pedal and scroll wheels as CAN signals ----
+// SCCM_steeringAngle (degrees, right = positive) -> VAPI_steeringAngle, VCLEFT_brakePressed -> VAPI_brakePedal,
+// VCLEFT_swc{Left,Right}{TiltLeft,Pressed,TiltRight,ScrollTicks} -> STW_*: QtCarVehicle feeds them
+// into its uinput devices game-steering / game-scroll-left / -right while GUI_vehicleGameMode is on.
+const game = { angle: 0, brake: 0, sent: {}, busy: false, next: null };
+function gameSend(obj) {           // latest values win; one request at a time
+  game.next = Object.assign(game.next || {}, obj);
+  if (game.busy) return;
+  const body = game.next; game.next = null;
+  for (const k of Object.keys(body)) if (game.sent[k] === body[k]) delete body[k];
+  if (!Object.keys(body).length) return;
+  Object.assign(game.sent, body);
+  game.busy = true;
+  fetch("api/state", { method: "POST", headers: { "Content-Type": "application/json" },
+                       body: JSON.stringify({ values: body, quiet: true }) })
+    .catch(() => {}).finally(() => { game.busy = false; if (game.next) gameSend({}); });
+}
+function steer(deg) {
+  deg = Math.max(-90, Math.min(90, Math.round(deg * 10) / 10));
+  game.angle = deg;
+  if (document.activeElement !== $("#steer")) $("#steer").value = deg;
+  $("#steerv").textContent = deg + "°";
+  gameSend({ SCCM_steeringAngle: deg, SCCM_steeringAngleValidity: "VALID" });
+}
+function brake(on) {
+  game.brake = on ? 1 : 0;
+  $("#brake").classList.toggle("on", !!on);
+  gameSend({ VCLEFT_brakePressed: game.brake });
+}
+const lock = () => +$("#lock").value;
+$("#lock").oninput = () => $("#lockv").textContent = lock() + "°";
+$("#steer").oninput = () => steer(+$("#steer").value);
+$("#steer").onpointerup = () => steer(0);      // springs back like a wheel let go
+$("#brake").onpointerdown = e => { $("#brake").setPointerCapture(e.pointerId); brake(1); };
+$("#brake").onpointerup = $("#brake").onpointercancel = () => brake(0);
+for (const pad of $$("[data-wheel]")) {
+  const w = pad.dataset.wheel;
+  for (const b of $$("[data-b]", pad)) {
+    const sig = "VCLEFT_swc" + w + b.dataset.b;
+    b.onpointerdown = e => { b.setPointerCapture(e.pointerId); b.classList.add("on"); gameSend({ [sig]: "ON" }); };
+    b.onpointerup = b.onpointercancel = () => { b.classList.remove("on"); gameSend({ [sig]: "OFF" }); };
+  }
+  // scroll ticks count per frame: send one step, then 0 again
+  for (const b of $$("[data-s]", pad)) b.onclick = () => {
+    gameSend({ ["VCLEFT_swc" + w + "ScrollTicks"]: +b.dataset.s });
+    setTimeout(() => gameSend({ ["VCLEFT_swc" + w + "ScrollTicks"]: 0 }), 120);
+  };
+}
+// keyboard: steer toward full lock while held, back to the middle when let go
+const held = new Set();
+let keysActive = false;
+$("#arcade").addEventListener("pointerdown", () => keysActive = true);
+document.addEventListener("pointerdown", e => { if (!$("#arcade").contains(e.target)) keysActive = false; });
+const KEYS = { ArrowLeft: "l", KeyA: "l", ArrowRight: "r", KeyD: "r", ArrowDown: "b", KeyS: "b", Space: "b" };
+const keyOn = e => KEYS[e.code] && ($("#keys").checked || keysActive) && e.target.type !== "text";
+document.addEventListener("keydown", e => {
+  if (!keyOn(e)) return;
+  e.preventDefault();
+  if (e.repeat) return;
+  held.add(KEYS[e.code]);
+  if (KEYS[e.code] === "b") brake(1);
+  keySteer();
+});
+document.addEventListener("keyup", e => {
+  if (!KEYS[e.code] || !held.has(KEYS[e.code])) return;
+  held.delete(KEYS[e.code]);
+  if (KEYS[e.code] === "b") brake(0);
+});
+let keyTimer = null;
+function keySteer() {              // ~2 s from the middle to full lock, faster back
+  clearTimeout(keyTimer);
+  const target = held.has("l") && !held.has("r") ? -lock() : held.has("r") && !held.has("l") ? lock() : 0;
+  if (target === game.angle) return;
+  const step = (target === 0 ? 3 : 1.5) * lock() / 30;
+  const d = target - game.angle;
+  steer(Math.abs(d) <= step ? target : game.angle + Math.sign(d) * step);
+  keyTimer = setTimeout(keySteer, 50);
+}
+document.addEventListener("keyup", keySteer);
+// gamepad: left stick = wheel (right = positive, as QtCar and the game read the angle), B / left trigger = brake
+let padOn = false;
+window.addEventListener("gamepadconnected", e => {
+  $("#padstat").textContent = "gamepad: " + e.gamepad.id;
+  if (!padOn) { padOn = true; requestAnimationFrame(padLoop); }
+});
+window.addEventListener("gamepaddisconnected", () => $("#padstat").textContent = "");
+let padLast = 0, padBrake = 0;
+function padLoop(t) {
+  const gp = [...navigator.getGamepads()].find(g => g);
+  if (!gp) { padOn = false; return; }
+  if (t - padLast > 30) {
+    padLast = t;
+    const x = gp.axes[0] || 0;
+    const deg = Math.abs(x) < 0.08 ? 0 : x * lock();
+    if (Math.abs(deg - game.angle) >= 0.5 || (deg === 0 && game.angle !== 0)) steer(deg);
+    const b = (gp.buttons[1] && gp.buttons[1].pressed) || (gp.buttons[6] && gp.buttons[6].value > 0.3) ? 1 : 0;
+    if (b !== padBrake) { padBrake = b; brake(b); }
+  }
+  requestAnimationFrame(padLoop);
+}
 
 // ---- CAN signal browser: every message and signal of the database, set here, watched live ----
 let canDb = null, canWire = {}, canFilter = "all", canLimit = 50;

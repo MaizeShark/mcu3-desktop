@@ -20,6 +20,7 @@ everything was found out.
 |---|---|---|---|---|---|---|
 | UI, touch, screen | always | Xvfb, x11vnc, xdpyinfo, a VNC viewer, `tesla-touch` (+ udev rule), `/dev/uinput` | kit groups `core`, `mesa`, `system`, `assets` | QtCar (`/startup.sh`), escalator | Xvfb, x11vnc, tesla-touch, viewer | `qtcar.log`, `touch.err`, `xvfb.log`, `x11vnc.log` |
 | Browser | always | – | kit group `cef` | (inside QtCar: CEF) | – | `qtcar.log` (DevTools on :9222) |
+| Arcade (BBR2, MAME) | always; steering/pedal need `--vehicle` | `/dev/uinput`, `tesla-touch/99-tesla-touch.rules` (hides the `game-*` devices) | `/sbin/sv` wrapper, `qtcar-service` (`system`) | `cobalt` + `cobalt-input`, `mame` on demand | `tools/game-windows.py` | `game-windows.log`; image: `/run/qtcar-sv/*.log` |
 | Fireplace, dog mode, HAL 9000 videos | always | – | `/sbin/sv` wrapper (`system`) | `fireplace`/`dog-mode`/`hal-9000` on demand | – | `qtcar.log` |
 | Offline navigation | maps installed, `NAV=1` | podman (only to build tiles) | map tiles (`./tesla build-image`) | `valhalla`, `qtcar-tmserver` | – | `valhalla.log`, `qtcar-tmserver.log` |
 | Vehicle data + panel | `--vehicle` | python3; once: `unicorn`, `pyelftools` | kit group `vehicle` | `qtcar-sim`, `qtcar-vehicle` | `tesla-can.py` (panel :8099) | `qtcar-sim.log`, `qtcar-vehicle.log`, `can.log` |

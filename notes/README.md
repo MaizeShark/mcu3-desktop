@@ -12,4 +12,5 @@ earlier ones where they disagree.
 | `session4-2026-09-23.md` | fake GPS, vehicle data (simulator, CAN signal database), the browser (CEF without sandbox, V8 snapshot, WebAudio crash), the sandbox tooling |
 | `session5-2026-09-23.md` | telltales, presets and the web panel, per-user service homes, real GPS receivers, UI buttons, audio (AudioWeaver/audiod on snd-aloop), backup camera, videos, USB music, Spotify/TuneIn dead ends |
 | `session6-2026-09-24.md` | the `./tesla` command (start/stop/status/check/logs/build-image, tesla.conf), kit version stamp, panel services, docs |
+| `session7-2026-09-25.md` | all CAN signals on the panel; the arcade (BBR2 and MAME): input devices, GPU, window manager, focus, sv verbs |
 | `next-session-prompt.md` | the prompt for the next session |

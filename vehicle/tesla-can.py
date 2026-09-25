@@ -580,6 +580,9 @@ def serve_panel(snd, port, bind="127.0.0.1", log_dir=None):
                     for k in req.get("unset", []):
                         snd.values.pop(k, None)
                         snd.sim.pop(k)
+                if req.get("quiet"):     # the game controls: many small changes, no log, no state
+                    self.reply(200, {"ok": True})
+                    return
                 print("panel: " + " ".join("%s=%s" % kv for kv in values.items()) +
                       "".join(" -%s" % k for k in req.get("unset", [])), file=sys.stderr, flush=True)
                 self.reply(200, self.state())

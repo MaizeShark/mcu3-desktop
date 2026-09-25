@@ -54,6 +54,36 @@ On when maps are installed (`--no-nav` switches it off).
   geocoding go to Google online and work. Traffic, superchargers availability and similar online
   data don't load.
 
+## Arcade
+
+Always on (launcher -> Arcade): Beach Buggy Racing 2 (Tesla's own port, "cobalt") and the MAME
+classics (Asteroids, Missile Command, Centipede, Lunar Lander, ...). 2048 is part of QtCar.
+
+- How: QtCar asks the escalator to start the game (`sv up mame`, `start-tesla-game-cobalt`); the
+  kit's `/sbin/sv` wrapper runs it through `qtcar-service` instead of runit, and stops it again on
+  EXIT (`sv DOWN mame`, `sv force-stop cobalt`).
+- **Beach Buggy Racing 2** draws its own window at QtCar's game area (0,60 1920x1140) and reads
+  four evdev devices: `game-touch` (made by `input_to_virtual` from the touchscreen, mapped into
+  the game window), `game-steering` and `game-scroll-left/-right` (made by `qtcar-vehicle` while
+  the game runs, from the steering angle, the brake pedal and the scroll wheels). On the car you
+  steer with the wheel and brake with the pedal; the car accelerates by itself. Here they come
+  from CAN signals: needs `--vehicle`, and the panel's **Arcade controls** (slider, keys, a
+  gamepad) set them. Touch works without it (on-screen arrows and pedals).
+- **MAME** games: QtCar shows the game's picture itself and sends the keys with XTest to MAME's
+  window, which stays below QtCar: COIN/START in the top bar, the rest with the scroll wheels
+  (`GUI_steeringWheelControlsMode` TeslAtari), i.e. the panel's scroll wheel buttons.
+- Native screen: the car has no window manager. `tools/game-windows.py` (started by `./tesla
+  start`) takes the game windows back from the desktop's: BBR2 at QtCar's place and on top, MAME
+  below QtCar with the keyboard focus.
+- Speed: both render on the GPU with `--native` on Intel (the game users get `/dev/dri` too). In
+  software (VNC, other GPUs) BBR2 needs 6+ cores and runs slowly; taps can get lost.
+- Sound: through the media channel (`tplug-media`), like the media player; with `--audio`.
+- Logs: in the image, `/run/qtcar-sv/cobalt.log`, `mame.log`; `/tmp/games/cobalt-input.log`.
+  `game-windows.log` in the run folder.
+- Limits: the host's desktop panel (Xfce) shows over QtCar's top bar while MAME has the focus;
+  BBR2 with a steering wheel was tested through the panel's API only; the sound wasn't listened
+  to; VNC mode (Xvfb) is untested with the games.
+
 ## Vehicle data and the web panel
 
 `--vehicle` (`VEHICLE=1`). The UI sees a car: configuration (Model 3, color, wheels, map
