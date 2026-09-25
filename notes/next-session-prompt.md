@@ -31,9 +31,8 @@ warnings, the charging screen's energy added, AMD GPUs behind --gpu (untested). 
 notes/session7-2026-09-25.md.
 
 Open, roughly in order (ask before large restructurings):
-1. The browser takes no input: pages get no click/wheel/touch events (VNC and native). QtCar
-   uses ChromiumClient::sendMouseDown/Up/Move/Wheel; find out whether they're called (gdb in the
-   sandbox, sandbox.sh --browser -x) and where it stops.
+1. Radeon HD 6670 (the user has one): `./tesla start --native --gpu` with the screen on it should
+   use Mesa 18's r600 (session 7, untested). Check that QtCar maps r600_dri.so and renders.
 2. `./tesla arcade` (the user's idea): run just a game (BBR2) in the desktop's compositor, on
    the GPU, without the full QtCar UI; the arcade over VNC makes no sense in software rendering.
 3. Bluetooth calls: the call audio (hands-free, microphone) is untested; the A2DP connect race.
@@ -41,6 +40,17 @@ Open, roughly in order (ask before large restructurings):
    from the user's own dump, booting straight into `./tesla start --native` (never distributable:
    it contains the firmware).
 5. Remaining audio dropouts in games follow the laptop's heat (session 7 notes).
+6. Later (the user wants to try it once the hardware works): a "car network" mode for a real
+   Autopilot computer (HW2.5) on the PC's Ethernet, bench only. What's known: the car network is
+   192.168.90.x, MCU .100, IC .101, gateway .102, AP/"ape" .103, "ape-b" .105, LB .104
+   (/etc/hosts, /etc/RunQtCar.vars: QCSUBNET, QCGW, QCAP, ...); the services normally get
+   --gw/--ip/... and use multicast 224.0.0.26, which qtcar-service strips for loopback; so the
+   mode would put a dedicated NIC (or a netns) on 192.168.90.100 and keep those options.
+   GpsManager knows LOC_adas* (a position from the Autopilot side) besides its own receiver:
+   with the APE connected, tesla-gps.py would stay off (and maybe parts of tesla-can.py). To find
+   out: what the APE sends to the MCU (UDP ports, e.g. with can-sniff.py/tcpdump on that NIC),
+   what it needs to run on the bench (12 V, its CAN buses, the gateway's messages), and how the
+   MCU services pick the APE's data up. Never on a car that drives.
 
 How to work: test in the sandbox or on the laptop first; the user runs sudo commands on this PC.
 Commit often, push to origin (the user's Forgejo); push to `github` only when asked, after
