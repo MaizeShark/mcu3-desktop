@@ -110,7 +110,9 @@ charging, lights, outside temperature, tire pressures, telltales.
 - Logs: `qtcar-sim.log`, `qtcar-vehicle.log`, `can.log` (what tesla-can.py sends and answers).
   Climate: power, fan speed, air distribution, recirculation and A/C are answered like the car's
   climate controller would; seat heaters and temperatures work in the UI (nothing heats).
-- Limits: TPMS warnings don't trigger; the charging screen shows "+0 mi" added. Details: [`vehicle/README.md`](../vehicle/README.md).
+  A tire below 2.2 bar (preset `tire-low`, the panel's sliders) shows the TPMS warning (with the
+  drive rail on).
+- Limits: the charging screen shows "+0 mi" added. Details: [`vehicle/README.md`](../vehicle/README.md).
 
 ## GPS
 

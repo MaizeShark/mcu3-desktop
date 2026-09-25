@@ -41,6 +41,8 @@ SIM_IDS = {0x03e, 0x102, 0x103, 0x129, 0x132, 0x204, 0x20d, 0x210, 0x212, 0x214,
            0x340, 0x352, 0x36f, 0x3a1, 0x3c2, 0x3e2, 0x3e3, 0x3f1, 0x3f9, 0x3fa, 0x438, 0x458, 0x4e2,
            0x743, 0x744, 0x7ff}
 
+TPMS_WARN_BAR = 2.2     # soft warning below this (25 % under the Model 3's 2.9 bar)
+
 PRESETS = {
     # what QtCarSimService leaves out: the drive inverter (gear, speed, odometer)
     "parked": {
@@ -51,6 +53,9 @@ PRESETS = {
         # is invalid, and BRAKE amber unless the iBooster reports READY/ACTUATION
         "DI_tcTelltaleOn": "OFF", "DI_ptcStateUI": "ON",
         "IBST_iBoosterStatus": "READY", "IBST_driverBrakeApply": "BRAKES_NOT_APPLIED",
+        # the simulator's tires are at 1.0 bar; a TPMS module that has learned its sensors
+        "SIM_tpmsPressureFL": 2.9, "SIM_tpmsPressureFR": 2.9, "SIM_tpmsPressureRL": 2.9, "SIM_tpmsPressureRR": 2.9,
+        "TPMS_learningStatus": "PASSED", "TPMS_localisationStatus": "PASSED",
     },
     # the rest change one part of the car; combine them, also at runtime (--set --preset NAME).
     # SIM_* go to QtCarSimService; CAN signals in messages the sim sends (BMS_packCurrent in
@@ -77,6 +82,9 @@ PRESETS = {
     "lights-on": {"SIM_headLights": "true", "SIM_parkingLights": "true"},
     "lights-off": {"SIM_headLights": "false", "SIM_parkingLights": "false", "SIM_highbeamSwitch": "false",
                    "SIM_frontFogLights": "false"},
+    # a pressure below TPMS_WARN_BAR also sets that wheel's warning (Sender.set). The warning
+    # (telltale, "Tire pressure low") shows with the drive rail on; the image needs
+    # [vapi] filter_tpms_faults=false (the kit sets it)
     "tires-ok": {"SIM_tpmsPressureFL": 2.9, "SIM_tpmsPressureFR": 2.9, "SIM_tpmsPressureRL": 2.9, "SIM_tpmsPressureRR": 2.9},
     "tire-low": {"SIM_tpmsPressureFL": 1.7},
     "winter": {"SIM_hvacOutsideTemp": -5, "SIM_hvacInsideTemp": 2},
@@ -331,10 +339,18 @@ class Sender:
     def set(self, name, text):
         if name.startswith("SIM_"):
             self.sim.set(name, str(text).lower() if str(text).lower() in ("true", "false") else str(text))
+            if name.startswith("SIM_tpmsPressure"):
+                self.tpms_warning(name[-2:], float(text))
             return
         if name not in self.sigs:
             raise KeyError("unknown signal %s (try --find)" % name)
         self.values[name] = parse_value(self.sigs[name][1], str(text))
+
+    def tpms_warning(self, wheel, bar):
+        """The TPMS module's soft warning for a wheel (and the global one) from its pressure."""
+        self.values["TPMS_softWarning" + wheel] = float(bar < TPMS_WARN_BAR)
+        self.values["TPMS_c_globalSoftWarning"] = float(any(self.values.get("TPMS_softWarning" + w) == 1
+                                                            for w in ("FL", "FR", "RL", "RR")))
 
     def checksum(self, m, base, frame):
         """Fill in the checksum byte, if the message has one (VehicleUtils::calculateChecksum)."""

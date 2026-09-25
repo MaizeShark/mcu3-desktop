@@ -131,9 +131,15 @@ ESP is On while `DI_tcTelltaleOn` is on or invalid, or `ESP_espFaultLamp` is set
 mismatch, else Yellow unless `IBST_iBoosterStatus` is READY or ACTUATION. With the rail off all
 three are Off. Since the sim's drive inverter is patched out, nobody sent 0x2B6 or 0x39D.
 
-Not working yet: TPMS warnings. The soft/hard warning bits in `TPMS_StatusC` (0x36F) reach
-`TPMSStatusMessage::processContiMessage` → `filterStatus`, but `TPMS_softWarnings` stays None
-(it waits `TPMSDriveRailOnFilterTime` after the rail comes on and filters faults; not followed up).
+TPMS warnings (2026-09-25): the soft/hard warning bits in `TPMS_StatusC` (0x36F) reach
+`TPMSStatusMessage::processContiMessage` → `filterStatus`. That returns until the rail has been
+on for `vapi/tpms_drive_rail_on_filter_time_ms` (4000), and while `vapi/filter_tpms_faults` is on
+(the default; `filterTpmsFaults()`, off only in factory mode) it keeps the old warning values.
+The kit sets `[vapi] filter_tpms_faults=false`. tesla-can.py sets a wheel's
+`TPMS_softWarning<wheel>` (and `TPMS_c_globalSoftWarning`) when its `SIM_tpmsPressure<wheel>` is
+below 2.2 bar (`TPMS_WARN_BAR`): `--preset tire-low` or a panel slider -> yellow TPMS telltale,
+"Tire pressure low", the wheel in orange on the tire card (drive rail on). `parked` puts the
+tires at 2.9 bar (the simulator's default is 1.0) and the TPMS learning status at PASSED.
 
 ### Paint, wheels, performance
 

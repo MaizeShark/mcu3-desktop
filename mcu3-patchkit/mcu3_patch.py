@@ -321,7 +321,10 @@ SETTINGS_KEYS = {'General': {'VAPI_carType': '3', 'VAPI_trim': '0', 'VAPI_chassi
                  'audiod': {'audio_type': 'base'},
                  # USB sticks are found under $HOME/media/usb-* (StorageUtils::usbMediaFolder); the
                  # media server runs with its own HOME, the udev rule mounts under /home/tesla/media
-                 'usb': {'media_path': '/home/tesla/media'}}
+                 'usb': {'media_path': '/home/tesla/media'},
+                 # QtCarVehicle's TPMS filter (TPMSStatusMessage::filterStatus): on (the default) it
+                 # keeps the old warning values, so a low tire never showed a warning here
+                 'vapi': {'filter_tpms_faults': 'false'}}
 # QtCar runs as user tesla and reads /home/tesla/.Tesla/car; the /root copy is from when it
 # still ran as root. (path, owner uid)
 SETTINGS_FILES = [
