@@ -462,11 +462,30 @@ start_helpers() {
     fi
     if [ -n "$CAMERA" ]; then
         local cw=${CAMERA_SIZE%x*} ch=${CAMERA_SIZE#*x}
-        ( while :; do
+        # off while an arcade game runs (the car's game-mode.sh stops its dashcam too): with the game
+        # and the camera together audiod fell behind (pump errors, audible); without the camera
+        # not (A/B in a race on the T480: 0,4,3,3 vs 0,0,0,0 errors per 15 s). Stopped, not paused:
+        # after SIGCONT ffmpeg made up for the pause with 1000+ duplicated frames, and that burst
+        # caused errors of its own.
+        game() { pgrep -x CobaltLinux >/dev/null || pgrep -x mametesla >/dev/null; }
+        ( off=0
+          while :; do
+            if game; then
+                [ $off = 0 ] && echo "tesla: camera off while a game runs [t=$(date +%s)]"
+                off=1; sleep 1; continue
+            fi
+            [ $off = 1 ] && echo "tesla: camera on again [t=$(date +%s)]"
+            off=0
             # cropped to QtCar's aspect ratio (4:3), not stretched: a 16:9 webcam looked distorted
             ffmpeg -nostdin -loglevel warning -f v4l2 -i "$CAMERA" \
-                -vf "crop='min(iw,ih*$cw/$ch)':'min(ih,iw*$ch/$cw)',scale=$cw:$ch,format=bgr0" -f v4l2 "$CAMERA_DEV"
-            sleep 2
+                -vf "crop='min(iw,ih*$cw/$ch)':'min(ih,iw*$ch/$cw)',scale=$cw:$ch,format=bgr0" -f v4l2 "$CAMERA_DEV" &
+            ff=$!
+            while kill -0 $ff 2>/dev/null; do
+                game && { kill $ff; break; }
+                sleep 1
+            done
+            wait $ff 2>/dev/null
+            game || sleep 2
           done ) </dev/null >"$LOG_DIR/camera.log" 2>&1 &
         add_pid $! camera
     fi

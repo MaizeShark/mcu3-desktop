@@ -303,9 +303,13 @@ class Summary:
             self.add("GPS", log.strip().splitlines()[-1][:120], "ok")
 
     def camera(self):
-        log = read(os.path.join(self.run, "camera.log")).strip()
-        if log:
-            self.add("Camera", f"{len(log.splitlines())} ffmpeg messages, last: {log.splitlines()[-1][:100]}", "warn")
+        lines = read(os.path.join(self.run, "camera.log")).strip().splitlines()
+        msgs = [l for l in lines if not l.startswith("tesla: camera ")]     # the pauses during games
+        pauses = sum(1 for l in lines if l.startswith("tesla: camera off"))
+        if msgs:
+            self.add("Camera", f"{len(msgs)} ffmpeg messages, last: {msgs[-1][:100]}", "warn")
+        elif pauses:
+            self.add("Camera", f"off during {pauses} game(s)", "ok")
 
     def problems(self):
         found = []

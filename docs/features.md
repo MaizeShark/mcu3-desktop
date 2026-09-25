@@ -78,7 +78,9 @@ classics (Asteroids, Missile Command, Centipede, Lunar Lander, ...). 2048 is par
   moves it with the steering wheel, for the trackball games).
 - Speed: both render on the GPU with `--native` on Intel (the game users get `/dev/dri` too). In
   software (VNC, other GPUs) BBR2 needs 6+ cores and runs slowly; taps can get lost.
-- Sound: through the media channel (`tplug-media`), like the media player; with `--audio`.
+- Sound: through the media channel (`tplug-media`), like the media player; with `--audio`. The
+  backup camera's ffmpeg is off while a game runs: game + camera made audiod fall behind (pump
+  errors, audible dropouts). A few can still come while the game loads.
 - Logs: in the image, `/run/qtcar-sv/cobalt.log`, `mame.log`; `/tmp/games/cobalt-input.log`.
   `game-windows.log` in the run folder.
 - Limits: the MAME games aren't really usable on a desktop (the desktop's panel over QtCar's top
@@ -182,6 +184,7 @@ panel), e.g. a phone through `scrcpy --video-source=camera --v4l2-sink=/dev/vide
   `sudo modprobe v4l2loopback devices=2 video_nr=10,32 exclusive_caps=1,1`.
 - How: QtCar reads 32-bit BGRX frames from `[bkcam] deviceId` (set at start, with
   `forceFeedGood`, since no camera module reports the feed as good). ffmpeg converts the source
-  (any format) into that device.
-- Logs: `camera.log` (ffmpeg).
+  (any format) into that device. It's off while an arcade game runs (together they overloaded the
+  laptop: audible dropouts), like the car's dashcam in game mode.
+- Logs: `camera.log` (ffmpeg, and when it was off for a game).
 - Limits: the source must deliver frames; ffmpeg retries every 2 s until it does.
