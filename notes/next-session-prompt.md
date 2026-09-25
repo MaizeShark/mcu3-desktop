@@ -17,6 +17,18 @@ Current state:
   reboot it). Its copy: ~/mcu3-desktop (repo files via rsync of `git ls-files`, the image copied
   with zstd). A rooted Pixel 7a ("Pixel 7a 2") is on this PC's adb, paired with the laptop's "Tesla".
 
+Done late in session 6: contacts in the phone app (QtCarBluetooth's HOME), the arcade starts
+(mame classics and Beach Buggy Racing 2 through qtcar-service jobs; BBR2 menus work).
+
+The user's wishes for next time:
+A. All CAN signals in the web panel (vehicle/panel.html, tesla-can.py): browse/search every
+   message and signal of the CAN database (379 messages, 8759 signals), set and watch them.
+B. Arcade controls: BBR2 is played with the steering wheel and pedals on the car.
+   input_to_virtual (libTeslaDevices: DeviceDriverScrollWheel, a steering driver) creates
+   "game-steering", "game-scroll-left/right" (missing here, only "game-touch"); find their source
+   (probably CAN: steering angle, scroll wheels, pedals) and feed it (panel sliders, keyboard,
+   gamepad). Also place the game windows at QtCar's TIDK window (Xfce decorates them).
+
 Open, roughly in order (ask before large restructurings):
 1. Bluetooth: does selecting "Phone" in QtCar's Media app switch audiod to source 3 (A2DP) by
    itself? Calls (hands-free audio, microphone). The A2DP connect race (sometimes a second try).
