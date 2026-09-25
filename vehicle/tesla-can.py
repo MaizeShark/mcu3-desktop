@@ -530,6 +530,7 @@ def serve_panel(snd, port, bind="127.0.0.1", log_dir=None):
             data = body if isinstance(body, bytes) else json.dumps(body).encode()
             self.send_response(code)
             self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "no-store")    # an old page would send old controls
             if len(data) > 4096 and "gzip" in self.headers.get("Accept-Encoding", ""):
                 data = gzip.compress(data, 5)
                 self.send_header("Content-Encoding", "gzip")
