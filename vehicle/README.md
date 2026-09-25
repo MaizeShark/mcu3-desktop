@@ -85,6 +85,7 @@ timestamps to GpsManager otherwise; harmless so far), `--no-carconfig`, `--van`.
 | charge port | `SIM_chargePortDoor`, `SIM_chargePortLatch` (SNA, Disengaged, Engaged, Blocking) | `VAPI_chargePortDoor`, `VAPI_chargePortLatch` | port on the car picture |
 | charging | `SIM_chargeState` (Disconnected, NoPower, Starting, Charging, Complete, Stopped), `SIM_chargerProximity`, `SIM_isPilotGood` | `VAPI_isCharging`, `VAPI_pilotCurrent`, `VAPI_chargeCableType`, `VAPI_chargerPower` | charging screen, green bolt |
 | time to full | `SIM_chargeTimeToFull` (h) | `VAPI_chargeTimeToFull` | "Time Remaining" |
+| battery while charging | `SIM_batteryLevel`, `SIM_chargeTimeToFull`, set by tesla-can.py's `ChargeModel` (the sim keeps its level) | `VAPI_batteryLevel`, `GUI_chargeSessionIdealEnergyAdded` | "+6 km" added, time remaining; `charge-complete` at 100% |
 | charge rate | `BMS_packCurrent` (A, **positive** = charging; needs merge mode) | `VAPI_batteryCurrent`, `VAPI_chargeAveragePower` -> `GUI_chargeAveragePower` | "51 mi/hr" (power / Wh per mile) |
 | battery | `SIM_batteryLevel` (%) | `VAPI_batteryLevel`, `VAPI_ratedRange` | range, battery bar |
 | lights | `SIM_headLights`, `SIM_parkingLights`, `SIM_highbeamSwitch`, `SIM_frontFogLights` | `VAPI_headLights`, `VAPI_highBeamLights`, `VAPI_frontFogLights`, `LIGHT_*` | headlight icon in the status bar |

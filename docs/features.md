@@ -112,7 +112,9 @@ charging, lights, outside temperature, tire pressures, telltales.
   climate controller would; seat heaters and temperatures work in the UI (nothing heats).
   A tire below 2.2 bar (preset `tire-low`, the panel's sliders) shows the TPMS warning (with the
   drive rail on).
-- Limits: the charging screen shows "+0 mi" added. Details: [`vehicle/README.md`](../vehicle/README.md).
+  While charging, tesla-can.py fills the battery at the set charge current (`BMS_packCurrent` into
+  a 75 kWh pack at 360 V): energy/range added, time remaining, complete at 100%.
+- Limits: the charger values on the charging screen (A, V) are the simulator's. Details: [`vehicle/README.md`](../vehicle/README.md).
 
 ## GPS
 

@@ -145,6 +145,44 @@ def decode_signal(frame, s):
     return s.get("enum", {}).get(str(raw)) or ("%g" % (raw * s["scale"] + s.get("offset", 0)))
 
 
+class ChargeModel:
+    """The battery fills while charging. The simulator keeps its battery level where it is, so
+    the charging screen said "+0 mi" (GUI_chargeSessionIdealEnergyAdded compares the energy
+    with the session's start). While SIM_chargeState is Charging, SIM_batteryLevel rises by what
+    the charge current (BMS_packCurrent, positive = into the pack) delivers at PACK_V into
+    PACK_KWH, and the time to full follows; at 100 % the state becomes Complete. The level starts
+    from what QtCarVehicle shows."""
+    PACK_V, PACK_KWH, EVERY = 360.0, 75.0, 5.0
+
+    def __init__(self, snd):
+        self.snd, self.last, self.level = snd, None, None
+
+    def tick(self, now):
+        if self.last is not None and now - self.last < self.EVERY:
+            return
+        dt, self.last = (now - self.last if self.last is not None else 0.0), now
+        sim = self.snd.sim.values
+        if sim.get("SIM_chargeState") != "Charging":
+            self.level = None
+            return
+        if self.level is None:           # a new session: from the set level, else the car's
+            try:
+                self.level = float(sim.get("SIM_batteryLevel") or dv_request(4030, "_data_get_value_request_?name=VAPI_batteryLevel", 0.5))
+            except (TypeError, ValueError):
+                return
+            return
+        amps = max(0.0, self.snd.values.get("BMS_packCurrent", 0.0))
+        self.level = min(100.0, self.level + amps * self.PACK_V * dt / 3600 / 1000 / self.PACK_KWH * 100)
+        self.snd.sim.set("SIM_batteryLevel", "%.2f" % self.level)
+        if amps > 0:                     # "Time Remaining" (hours) at this rate
+            hours = (100 - self.level) / 100 * self.PACK_KWH / (amps * self.PACK_V / 1000)
+            self.snd.sim.set("SIM_chargeTimeToFull", "%.2f" % hours)
+        if self.level >= 100:
+            for k, v in PRESETS["charge-complete"].items():
+                self.snd.set(k, v)
+            print("car: battery full, charge complete", file=sys.stderr, flush=True)
+
+
 class Responder:
     """Listens to QtCarVehicle's outgoing frames (:4321): records them for the panel and, with
     respond, answers the UI requests in RESPONSES."""
@@ -723,10 +761,12 @@ def main():
         serve_panel(snd, args.http, args.http_bind, args.log_dir)
     # QtCar's outgoing frames: answered with --respond, shown on the panel
     responder = Responder(snd, args.respond) if args.respond or args.http else None
+    charge = ChargeModel(snd)
     try:
         while True:
             with snd.lock:
                 snd.tick(time.monotonic())
+                charge.tick(time.monotonic())
                 if responder:
                     responder.poll()
             try:
