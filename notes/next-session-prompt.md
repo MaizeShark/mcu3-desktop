@@ -1,6 +1,7 @@
 Tesla Model 3 MCU3 project in ~/TeslaMCU (public: github.com/MaizeShark/mcu3-desktop). Read
-CLAUDE.md, README.md, docs/, then notes/session6-2026-09-24.md (the latest session: the ./tesla
-command, docs, native screen on a touch laptop, GPU, camera, Bluetooth, audio clock).
+CLAUDE.md, README.md, docs/, then notes/session6-2026-09-24.md (the ./tesla command, native
+screen on a touch laptop, GPU, camera, Bluetooth, audio clock) and notes/session7-2026-09-25.md
+(the latest: every CAN signal on the panel, the arcade).
 
 Current state:
 - `./tesla start|stop|status|check|logs|config|services|build-image`, settings in tesla.conf.
@@ -17,19 +18,12 @@ Current state:
   reboot it). Its copy: ~/mcu3-desktop (repo files via rsync of `git ls-files`, the image copied
   with zstd). A rooted Pixel 7a ("Pixel 7a 2") is on this PC's adb, paired with the laptop's "Tesla".
 
-Done late in session 6: contacts in the phone app (QtCarBluetooth's HOME). The arcade is only
-started: qtcar-service jobs mame/cobalt/cobalt-input launch Asteroids and Beach Buggy Racing 2 in
-a window, but neither game really works yet (see the session 6 notes, "Arcade").
-
-The user's wishes for next time:
-A. All CAN signals in the web panel (vehicle/panel.html, tesla-can.py): browse/search every
-   message and signal of the CAN database (379 messages, 8759 signals), set and watch them.
-B. Make the arcade work (a new session): find out what's wrong with each game (input, window,
-   sound, ...). BBR2 is played with the steering wheel and pedals on the car.
-   input_to_virtual (libTeslaDevices: DeviceDriverScrollWheel, a steering driver) creates
-   "game-steering", "game-scroll-left/right" (missing here, only "game-touch"); find their source
-   (probably CAN: steering angle, scroll wheels, pedals) and feed it (panel sliders, keyboard,
-   gamepad). Also place the game windows at QtCar's TIDK window (Xfce decorates them).
+Done in session 7: the panel's "CAN signals" section (browse/search/set/watch all 8759
+signals, live decoded values) and "Arcade controls" (steering, brake, scroll wheels; keys,
+gamepad). The arcade plays on the laptop (--native): BBR2 by touch and with steering/brake/
+scroll wheels (CAN signals -> qtcar-vehicle's uinput devices), MAME with COIN/START and the
+wheels (XTest keys, focus by tools/game-windows.py). Still to check with the user: the game
+sound, the gamepad, VNC mode with the games, other MAME games.
 
 Open, roughly in order (ask before large restructurings):
 1. Bluetooth: music works ("Phone" in the Media app switches audiod to source 3 by itself,
