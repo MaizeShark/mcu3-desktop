@@ -277,6 +277,14 @@ EOF
     step "Mounts and touch"
     sudo mkdir -p "$CHROOT/dev/input"
     sudo mount --bind /proc "$CHROOT/proc"
+    # /dev/input: a tmpfs (touch is bound in below; the arcade game's virtual input devices get
+    # their nodes there); /dev/uinput and /sys/class + /sys/devices (read-only) for the game's
+    # input_to_virtual and its device scan. Not all of /sys: it would cover the net_cls cgroup.
+    sudo mount -t tmpfs -o mode=755,size=64k tmpfs "$CHROOT/dev/input"
+    sudo touch "$CHROOT/dev/uinput" && sudo mount --bind /dev/uinput "$CHROOT/dev/uinput"
+    for d in class devices; do
+        sudo mkdir -p "$CHROOT/sys/$d" && sudo mount --bind -o ro /sys/$d "$CHROOT/sys/$d"
+    done
     # The chroot's own /dev/shm, not the host's: its shared memory (audio tplug channels, DVSM data
     # values, ...) is shared between processes of different users. In the host's sticky /dev/shm,
     # fs.protected_regular (Linux >= 4.19, not on the car) refuses O_CREAT on a file another user

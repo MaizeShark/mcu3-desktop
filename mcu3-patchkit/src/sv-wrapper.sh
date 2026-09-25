@@ -7,7 +7,7 @@
 
 RUNDIR=/run/qtcar-sv
 handled() {
-    case "$1" in fireplace|dog-mode|hal-9000) return 0 ;; esac
+    case "$1" in fireplace|dog-mode|hal-9000|mame|cobalt|cobalt-input) return 0 ;; esac
     return 1
 }
 

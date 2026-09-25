@@ -22,7 +22,7 @@ if [ "$1" = "--list" ]; then
     echo audiod
     echo a2dpbridge
     echo dbus; echo bsa_server; echo btd
-    echo fireplace; echo dog-mode; echo hal-9000
+    echo fireplace; echo dog-mode; echo hal-9000; echo mame; echo cobalt
     exit 0
 fi
 JOB=$1
@@ -127,6 +127,68 @@ if [ "$JOB" = btd ]; then
     cd /var/run/btd || exit 1
     echo "qtcar-service: btd" >&2
     exec /usr/bin/btd
+fi
+
+# qtcar_env VAR: a variable from QtCar's environment (its display, X cookie, GL settings), for the
+# programs QtCar has the escalator start on its screen (videos, games)
+qtcar_env() {
+    p=$(pidof QtCar | cut -d' ' -f1)
+    [ -n "$p" ] && tr '\0' '\n' <"/proc/$p/environ" 2>/dev/null | sed -n "s/^$1=//p"
+}
+
+# The games (Toybox -> Arcade), as /etc/sv/{mame,cobalt,cobalt-input}/run minus sandbox, AppArmor,
+# CPU pinning (game-mode.sh would also stop services such as valhalla). QtCar asks the escalator,
+# which runs "sv start mame|cobalt" (the kit's /sbin/sv wrapper sends that here).
+#   mame: the arcade classics (Asteroids, Missile Command, ...), /usr/bin/mametesla, game name in
+#         /home/mame/game (QtCar writes it)
+#   cobalt: Beach Buggy Racing 2 (/usr/bin/games/cobalt/CobaltLinux), window and car colour from
+#         /tmp/games/cobalt/tidk/TIDK_*; cobalt-input (input_to_virtual) turns /dev/input/touch into
+#         virtual steering/touch devices (uinput), which the game finds in /dev/input
+case "$JOB" in mame|cobalt|cobalt-input)
+    DISP=$(qtcar_env DISPLAY); XAUTH=$(qtcar_env XAUTHORITY)
+    GLENV=""   # only what QtCar has: an empty MESA_LOADER_DRIVER_OVERRIDE would name driver ""
+    for v in LIBGL_ALWAYS_SOFTWARE MESA_LOADER_DRIVER_OVERRIDE; do
+        val=$(qtcar_env $v); [ -n "$val" ] && GLENV="$GLENV $v=$val"
+    done
+    ;;
+esac
+if [ "$JOB" = mame ]; then
+    export HOME=/home/mame
+    mkdir -p $HOME /var/run/mame
+    [ -e $HOME/game ] || echo missile >$HOME/game
+    touch /var/run/mame/polepos.state && chmod 644 /var/run/mame/polepos.state
+    chown -hR mame:mame $HOME /var/run/mame
+    game=$(cat $HOME/game)
+    echo "qtcar-service: mame -> mametesla $game (DISPLAY ${DISP:-:1})" >&2
+    as_user mame env -i PATH="$PATH" HOME=$HOME DISPLAY="${DISP:-:1}" XAUTHORITY="$XAUTH" $GLENV LC_ALL=C \
+        /usr/bin/mametesla -inipath /opt/mame/ "$game"
+fi
+if [ "$JOB" = cobalt-input ]; then
+    mkdir -p /home/games/cobalt-input /tmp/games/cobalt-input
+    echo "qtcar-service: cobalt-input -> input_to_virtual" >&2
+    cd /usr/bin/games/cobalt || exit 1
+    # as root: it needs /dev/uinput and /dev/input/touch (on the car its sandbox grants them)
+    exec env -i PATH="$PATH" LD_LIBRARY_PATH=/usr/bin/games/cobalt/ LC_ALL=C ./input_to_virtual
+fi
+if [ "$JOB" = cobalt ]; then
+    mkdir -p /home/games/cobalt /tmp/games/cobalt /home/tesla/.Tesla/data/cobalt
+    chown -hR cobalt:games /home/games/cobalt /tmp/games/cobalt /home/tesla/.Tesla/data/cobalt
+    TIDK=""
+    for f in /tmp/games/cobalt/tidk/TIDK_*; do [ -f "$f" ] && TIDK="$TIDK ${f##*/}=$(cat "$f")"; done
+    # the virtual input devices: input_to_virtual creates them through uinput; the chroot's /dev
+    # is the image's, so make their nodes (the game scans /dev/input and /sys/class/input)
+    /usr/local/bin/qtcar-service cobalt-input </dev/null >>/tmp/games/cobalt-input.log 2>&1 &
+    sleep 1
+    for d in /sys/class/input/event*; do
+        [ -r "$d/dev" ] || continue
+        n=/dev/input/${d##*/}; [ -e "$n" ] && continue
+        mknod "$n" c "$(cut -d: -f1 "$d/dev")" "$(cut -d: -f2 "$d/dev")" && chgrp games "$n" && chmod 660 "$n"
+    done
+    echo "qtcar-service: cobalt -> CobaltLinux (DISPLAY ${DISP:-:1}, $TIDK)" >&2
+    cd /usr/bin/games/cobalt || exit 1
+    as_user cobalt:games env -i PATH="$PATH" HOME=/home/games/cobalt DISPLAY="${DISP:-:1}" XAUTHORITY="$XAUTH" \
+        $GLENV $TIDK LD_LIBRARY_PATH=/usr/bin/games/cobalt/ FMOD_ALSA_DEVICE=game LC_ALL=C \
+        ./CobaltLinux --RootPath /usr/bin/games/cobalt/
 fi
 
 # The videos of fireplace / dog mode / HAL 9000 (as /etc/sv/<name>/run, minus the sandbox):
