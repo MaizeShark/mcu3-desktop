@@ -29,12 +29,13 @@ Always on: the Web app is Tesla's Chromium Embedded Framework build (Chrome 73).
 - How: the kit preloads `cef_nosandbox.so` (the Chromium sandbox can't work in the chroot),
   installs the missing V8 snapshot files and patches WebAudio's `createOscillator()` to return
   null (it crashed the renderer: Tesla's build has no FFT). DevTools: `curl http://127.0.0.1:9222/json`.
-  With `--native` the preloaded `egl_pixmap_shim.so` keeps the browser's own X window away from
-  the desktop's window manager (it showed up as a stray "Untitled window" and the page stayed
-  black or "Page Not Available").
+  Touches: QtCar replays them on its own uinput touchscreen (`tesla-uinput`) and the X server
+  delivers them to the browser's (invisible) window, as on the car. With `--native` the preloaded
+  `egl_pixmap_shim.so` keeps that window away from the desktop's window manager (on top, opacity
+  0, no focus). Over VNC, Xvfb doesn't read that touchscreen: the shim sends taps as clicks and
+  drags as wheel steps instead.
 - Limits: an old browser; pages that need a newer one fail. Pages that create a WebAudio
-  oscillator lose that feature. **Pages don't react to touch yet** (no taps, no scrolling; in
-  VNC and native mode): QtCar's input doesn't reach CEF, not investigated yet.
+  oscillator lose that feature. Over VNC there are no multi-touch gestures (pinch zoom).
 
 ## Videos: fireplace, dog mode, HAL 9000
 

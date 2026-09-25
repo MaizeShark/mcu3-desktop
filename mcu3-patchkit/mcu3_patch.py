@@ -196,8 +196,10 @@ RETIRED_FILES = [
 
 # (group, link path, target)
 SYMLINKS = [
-    # AMD GPUs (./tesla start --native --gpu): radeonsi is part of the Gallium megadriver
+    # AMD GPUs (./tesla start --native --gpu): radeonsi (GCN) and r600 (TeraScale, e.g. HD 6670)
+    # are part of the Gallium megadriver
     ('mesa', 'usr/lib/dri/radeonsi_dri.so', 'swrast_dri.so'),
+    ('mesa', 'usr/lib/dri/r600_dri.so', 'swrast_dri.so'),
     ('mesa', 'usr/lib/libLLVM-6.0.so', 'libLLVM-6.0.so.1'),
     ('mesa', 'usr/lib/libLLVM-3.8.so', 'libLLVM-3.8.so.1'),
     ('mesa', 'usr/lib/libbsd.so.0', 'libbsd.so.0.8.2'),

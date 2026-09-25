@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Keep the arcade's game windows away from the desktop's window manager (./tesla start --native).
 
+Also QtCar's browser window (made override-redirect with opacity 0 by src/egl_pixmap_shim.c) is
+kept above the window manager's windows: the page's touches reach it through X at that place.
+
 On the car there is no window manager. Beach Buggy Racing 2 opens a plain X window "cobalt" and
 QtCar moves it over its game area (ExternalAppView, 0,60 1920x1140). MAME's window stays below
 QtCar, which shows the game's picture itself and sends the key presses with XTest (they go to the
@@ -64,6 +67,12 @@ X.XTranslateCoordinates.argtypes = [ctypes.c_void_p, Window, Window, ctypes.c_in
                                     ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(Window)]
 X.XReparentWindow.argtypes = [ctypes.c_void_p, Window, Window, ctypes.c_int, ctypes.c_int]
 X.XMoveResizeWindow.argtypes = [ctypes.c_void_p, Window, ctypes.c_int, ctypes.c_int, ctypes.c_uint, ctypes.c_uint]
+X.XInternAtom.restype = ctypes.c_ulong
+X.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+X.XGetWindowProperty.argtypes = [ctypes.c_void_p, Window, ctypes.c_ulong, ctypes.c_long, ctypes.c_long, ctypes.c_int,
+                                 ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_int),
+                                 ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong),
+                                 ctypes.POINTER(ctypes.POINTER(ctypes.c_ubyte))]
 X.XGetInputFocus.argtypes = [ctypes.c_void_p, ctypes.POINTER(Window), ctypes.POINTER(ctypes.c_int)]
 X.XSetInputFocus.argtypes = [ctypes.c_void_p, Window, ctypes.c_int, ctypes.c_ulong]
 for f in ("XUnmapWindow", "XMapRaised", "XMapWindow", "XRaiseWindow", "XLowerWindow"):
@@ -99,6 +108,18 @@ def attrs(dpy, w):
     return a if X.XGetWindowAttributes(dpy, w, ctypes.byref(a)) else None
 
 
+def transparent(dpy, w, atom):
+    """True if w has _NET_WM_WINDOW_OPACITY 0: QtCar's browser window (src/egl_pixmap_shim.c)."""
+    typ, fmt, n, left, data = ctypes.c_ulong(), ctypes.c_int(), ctypes.c_ulong(), ctypes.c_ulong(), \
+        ctypes.POINTER(ctypes.c_ubyte)()
+    if X.XGetWindowProperty(dpy, w, atom, 0, 1, 0, 0, ctypes.byref(typ), ctypes.byref(fmt), ctypes.byref(n),
+                            ctypes.byref(left), ctypes.byref(data)) != 0 or not data:
+        return False
+    value = ctypes.cast(data, ctypes.POINTER(ctypes.c_ulong))[0] if n.value else None
+    X.XFree(data)
+    return value == 0
+
+
 def tidk_geometry(d):
     """(name, x, y, width, height) from QtCar's TIDK_WINDOW_* files, or None."""
     try:
@@ -124,6 +145,7 @@ def main():
     if not dpy:
         sys.exit("game-windows: can't open the display")
     root = X.XDefaultRootWindow(dpy)
+    opacity = X.XInternAtom(dpy, b"_NET_WM_WINDOW_OPACITY", 0)
     if args.hide_cursor:
         # XFixes: hidden for as long as this client is connected (back when it exits). Needs
         # version 4, negotiated first (else the server refuses the request).
@@ -182,6 +204,10 @@ def main():
             n = name(dpy, w)
             if w not in taken and n and n.startswith(top_names + hidden_names):
                 taken[w] = "top" if n.startswith(top_names) else "hidden"
+            elif w not in taken and not n and transparent(dpy, w, opacity):
+                # QtCar's browser window: invisible, but on top, where QtCar's touches land
+                taken[w] = "top"
+                print("game-windows: 0x%x is the browser's window, kept on top" % w, file=sys.stderr, flush=True)
         for w, kind in taken.items():
             if kind == "top":
                 # above the desktop's windows (the window manager raises its own frames, e.g.

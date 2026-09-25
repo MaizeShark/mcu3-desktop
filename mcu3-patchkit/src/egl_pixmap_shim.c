@@ -239,13 +239,18 @@ fnptr eglGetProcAddress(const char *name) {
 }
 
 // The browser's own X window. Chromium (inside QtCar) maps a plain top-level window for the
-// page, without WM_CLASS; QtCar redirects it with XComposite and draws its pixmap itself. On the
-// car there's no window manager. On a desktop (./tesla start --native) the window manager framed
-// it at once: a stray "Untitled window" on screen and a black page in QtCar (the named pixmap
-// goes stale when the window is reparented). So such windows become override-redirect before
-// they're mapped, as if there were no window manager, and lowered below QtCar's window (a
-// compositing window manager would draw them on top; on the car QtCar's redirect hides them).
-// QtCar's own window has a WM_CLASS.
+// page, without WM_CLASS; QtCar redirects it with XComposite and draws its pixmap itself. Touches
+// reach the page through X: QtCar replays them on its uinput touchscreen "tesla-uinput" in page
+// coordinates, and X delivers them to the window at that point, the browser's, which sits on top
+// at 0,0 and is invisible (redirected, no compositor on the car).
+// On a desktop (./tesla start --native) the window manager framed that window at once: a stray
+// "Untitled window" and a black page (the named pixmap goes stale when the window is
+// reparented). So such windows become override-redirect before they're mapped, as if there were
+// no window manager, stay on top (the touches), and get _NET_WM_WINDOW_OPACITY 0 so that a
+// compositing window manager doesn't draw them. Chromium also takes the X focus on a click, which
+// made xfwm4 put its panel over QtCar; the browser gets its keys from QtCar through CEF, so
+// XSetInputFocus to such a window is skipped. QtCar's own window has a WM_CLASS.
+// (tools/game-windows.py keeps windows with opacity 0 above the window manager's.)
 typedef struct { char *res_name, *res_class; } class_hint_t;
 typedef struct {
     unsigned long background_pixmap, background_pixel, border_pixmap, border_pixel;
@@ -259,6 +264,16 @@ typedef struct {
 #define CW_OVERRIDE_REDIRECT (1L << 9)
 
 // 1 if w is such a window and is now override-redirect
+#define MAX_UNMANAGED 32
+static unsigned long unmanaged_windows[MAX_UNMANAGED];
+
+static int is_unmanaged(unsigned long w) {
+    for (int i = 0; i < MAX_UNMANAGED; i++)
+        if (unmanaged_windows[i] == w)
+            return 1;
+    return 0;
+}
+
 static int unmanaged(void *dpy, unsigned long w) {
     static int (*query_tree)(void *, unsigned long, unsigned long *, unsigned long *, unsigned long **, unsigned int *);
     static int (*class_hint)(void *, unsigned long, class_hint_t *);
@@ -290,32 +305,215 @@ static int unmanaged(void *dpy, unsigned long w) {
     memset(&a, 0, sizeof a);
     a.override_redirect = 1;
     change(dpy, w, CW_OVERRIDE_REDIRECT, &a);
-    LOG("window 0x%lx: override-redirect, below QtCar (no window manager for the browser's window)\n", w);
+    static unsigned long (*intern)(void *, const char *, int);
+    static int (*prop)(void *, unsigned long, unsigned long, unsigned long, int, int, const unsigned char *, int);
+    if (!intern) {
+        *(void **)&intern = dlsym(RTLD_NEXT, "XInternAtom");
+        *(void **)&prop = dlsym(RTLD_NEXT, "XChangeProperty");
+    }
+    if (intern && prop) {
+        long zero = 0;    // format 32 = long in Xlib
+        prop(dpy, w, intern(dpy, "_NET_WM_WINDOW_OPACITY", 0), intern(dpy, "CARDINAL", 0), 32, 0,
+             (const unsigned char *)&zero, 1);
+    }
+    for (int i = 0; i < MAX_UNMANAGED; i++)
+        if (!unmanaged_windows[i] || i == MAX_UNMANAGED - 1) {
+            unmanaged_windows[i] = w;
+            break;
+        }
+    LOG("window 0x%lx: override-redirect, opacity 0 (no window manager for the browser's window)\n", w);
     return 1;
 }
 
-static void lower(void *dpy, unsigned long w) {
-    static int (*real)(void *, unsigned long);
-    if (!real) *(void **)&real = dlsym(RTLD_NEXT, "XLowerWindow");
-    if (real) real(dpy, w);
+// w or one of its ancestors is such a window (Chromium focuses a child of its top-level window)
+static int in_unmanaged(void *dpy, unsigned long w) {
+    static int (*query_tree)(void *, unsigned long, unsigned long *, unsigned long *, unsigned long **, unsigned int *);
+    static int (*xfree)(void *);
+    if (!query_tree) {
+        *(void **)&query_tree = dlsym(RTLD_NEXT, "XQueryTree");
+        *(void **)&xfree = dlsym(RTLD_NEXT, "XFree");
+    }
+    for (int depth = 0; w && depth < 8; depth++) {
+        if (is_unmanaged(w))
+            return 1;
+        unsigned long root, parent = 0, *kids = NULL;
+        unsigned int n;
+        if (!query_tree || !query_tree(dpy, w, &root, &parent, &kids, &n))
+            return 0;
+        if (kids)
+            xfree(kids);
+        if (parent == root)
+            return 0;
+        w = parent;
+    }
+    return 0;
+}
+
+int XSetInputFocus(void *dpy, unsigned long w, int revert_to, unsigned long time) {
+    static int (*real)(void *, unsigned long, int, unsigned long);
+    if (!real) *(void **)&real = dlsym(RTLD_NEXT, "XSetInputFocus");
+    if (w > 1 && in_unmanaged(dpy, w)) {    // 0 = None, 1 = PointerRoot
+        LOG("XSetInputFocus(0x%lx) skipped\n", w);
+        return 1;
+    }
+    return real(dpy, w, revert_to, time);
 }
 
 int XMapWindow(void *dpy, unsigned long w) {
     static int (*real)(void *, unsigned long);
     if (!real) *(void **)&real = dlsym(RTLD_NEXT, "XMapWindow");
-    int u = unmanaged(dpy, w);
-    int r = real(dpy, w);
-    if (u) lower(dpy, w);
-    return r;
+    unmanaged(dpy, w);
+    return real(dpy, w);
 }
 
 int XMapRaised(void *dpy, unsigned long w) {
     static int (*real)(void *, unsigned long);
     if (!real) *(void **)&real = dlsym(RTLD_NEXT, "XMapRaised");
-    int u = unmanaged(dpy, w);
-    int r = real(dpy, w);
-    if (u) lower(dpy, w);
-    return r;
+    unmanaged(dpy, w);
+    return real(dpy, w);
+}
+
+// Touches without an X touchscreen (VNC mode: Xvfb doesn't read QtCar's uinput "tesla-uinput").
+// QtCar hands a touch in the browser to VirtualTouchDevice::sendTouched/Dragged/Released
+// (libQtCarUIFramework, called through the PLT). If the X server has no "tesla-uinput" device,
+// they're also sent to the browser's window as synthetic core events (XSendEvent: tesla-touch's
+// XRecord doesn't see those, XTest it would): a tap is a click, a drag scrolls with wheel steps.
+typedef struct {
+    int type; unsigned long serial; int send_event; void *display;
+    unsigned long window, root, subwindow, time;
+    int x, y, x_root, y_root;
+    unsigned int state, button;
+    int same_screen;
+    char pad[120];
+} button_event_t;
+typedef struct { unsigned long id, type; char *name; int num_classes, use; void *classes; } device_info_t;
+
+#define WHEEL_STEP 60        // finger movement (px) per wheel step
+#define TAP_SLOP 12          // more than this is a drag
+static struct { int down, moved, x0, y0, lx, ly, acc_x, acc_y; } finger;
+static void *own_dpy;
+static long long xtouch_checked_ms;
+static int xtouch;           // 1: the X server has tesla-uinput (native: X delivers the real touches)
+
+static int x_has_touch(void) {
+    long long t = now_ms();
+    if (xtouch || (xtouch_checked_ms && t - xtouch_checked_ms < 5000))
+        return xtouch;
+    xtouch_checked_ms = t;
+    void *xi = dlopen("libXi.so.6", RTLD_NOW);
+    device_info_t *(*list)(void *, int *) = xi ? dlsym(xi, "XListInputDevices") : NULL;
+    int (*freelist)(device_info_t *) = xi ? dlsym(xi, "XFreeDeviceList") : NULL;
+    if (!own_dpy || !list || !freelist)
+        return 0;
+    int n = 0;
+    device_info_t *d = list(own_dpy, &n);
+    for (int i = 0; d && i < n; i++)
+        if (d[i].name && !strcmp(d[i].name, "tesla-uinput"))
+            xtouch = 1;
+    if (d)
+        freelist(d);
+    LOG("X server %s tesla-uinput: browser touches %s\n", xtouch ? "has" : "hasn't",
+        xtouch ? "go through X" : "are sent as clicks and wheel steps");
+    return xtouch;
+}
+
+// the window Chromium takes input on: the first child of the newest browser window
+static unsigned long browser_input_window(void) {
+    static int (*query_tree)(void *, unsigned long, unsigned long *, unsigned long *, unsigned long **, unsigned int *);
+    static int (*xfree)(void *);
+    if (!query_tree) {
+        *(void **)&query_tree = dlsym(RTLD_NEXT, "XQueryTree");
+        *(void **)&xfree = dlsym(RTLD_NEXT, "XFree");
+    }
+    unsigned long top = 0;
+    for (int i = 0; i < MAX_UNMANAGED; i++)
+        if (unmanaged_windows[i])
+            top = unmanaged_windows[i];
+    if (!top || !query_tree)
+        return top;
+    unsigned long root, parent, *kids = NULL, w = top;
+    unsigned int n = 0;
+    if (query_tree(own_dpy, top, &root, &parent, &kids, &n) && kids) {
+        if (n)
+            w = kids[0];
+        xfree(kids);
+    }
+    return w;
+}
+
+static void send_button(int x, int y, unsigned int button) {
+    static int (*send)(void *, unsigned long, int, long, void *);
+    static unsigned long (*root_of)(void *);
+    static int (*flush)(void *);
+    if (!send) {
+        *(void **)&send = dlsym(RTLD_NEXT, "XSendEvent");
+        *(void **)&root_of = dlsym(RTLD_NEXT, "XDefaultRootWindow");
+        *(void **)&flush = dlsym(RTLD_NEXT, "XFlush");
+    }
+    unsigned long w = browser_input_window();
+    if (!send || !w)
+        return;
+    for (int release = 0; release < 2; release++) {
+        button_event_t e;
+        memset(&e, 0, sizeof e);
+        e.type = release ? 5 : 4;                        // ButtonRelease, ButtonPress
+        e.send_event = 1; e.display = own_dpy; e.window = w; e.root = root_of(own_dpy);
+        e.x = e.x_root = x; e.y = e.y_root = y; e.same_screen = 1; e.button = button;
+        e.state = release ? 1u << (7 + button) : 0;
+        send(own_dpy, w, 1, release ? (1L << 3) : (1L << 2), &e);
+    }
+    flush(own_dpy);
+}
+
+static int emulate(void) {
+    static int opened;
+    if (!opened) {
+        opened = 1;
+        void *(*open_display)(const char *) = dlsym(RTLD_NEXT, "XOpenDisplay");
+        own_dpy = open_display ? open_display(NULL) : NULL;
+    }
+    return own_dpy && unmanaged_windows[0] && !x_has_touch();
+}
+
+#define POINT_X(p) ((int)(int32_t)((p) & 0xffffffffu))
+#define POINT_Y(p) ((int)(int32_t)((p) >> 32))
+#define REAL(name, sym) static void (*name)(void *, int, uint64_t); \
+    if (!name) *(void **)&name = dlsym(RTLD_NEXT, sym)
+
+void _ZN18VirtualTouchDevice11sendTouchedEi6QPoint(void *self, int id, uint64_t p) {
+    REAL(real, "_ZN18VirtualTouchDevice11sendTouchedEi6QPoint");
+    if (id == 0 && emulate()) {
+        finger.down = 1; finger.moved = 0; finger.acc_x = finger.acc_y = 0;
+        finger.x0 = finger.lx = POINT_X(p); finger.y0 = finger.ly = POINT_Y(p);
+    }
+    if (real) real(self, id, p);
+}
+
+void _ZN18VirtualTouchDevice11sendDraggedEi6QPoint(void *self, int id, uint64_t p) {
+    REAL(real, "_ZN18VirtualTouchDevice11sendDraggedEi6QPoint");
+    if (id == 0 && finger.down && emulate()) {
+        int x = POINT_X(p), y = POINT_Y(p);
+        if (abs(x - finger.x0) > TAP_SLOP || abs(y - finger.y0) > TAP_SLOP)
+            finger.moved = 1;
+        finger.acc_y += y - finger.ly; finger.acc_x += x - finger.lx;
+        finger.lx = x; finger.ly = y;
+        // finger up = content up = wheel down (5); left = wheel right (7)
+        for (; finger.acc_y <= -WHEEL_STEP; finger.acc_y += WHEEL_STEP) send_button(x, y, 5);
+        for (; finger.acc_y >= WHEEL_STEP; finger.acc_y -= WHEEL_STEP) send_button(x, y, 4);
+        for (; finger.acc_x <= -WHEEL_STEP; finger.acc_x += WHEEL_STEP) send_button(x, y, 7);
+        for (; finger.acc_x >= WHEEL_STEP; finger.acc_x -= WHEEL_STEP) send_button(x, y, 6);
+    }
+    if (real) real(self, id, p);
+}
+
+void _ZN18VirtualTouchDevice12sendReleasedEi6QPoint(void *self, int id, uint64_t p) {
+    REAL(real, "_ZN18VirtualTouchDevice12sendReleasedEi6QPoint");
+    if (id == 0 && finger.down && emulate()) {
+        if (!finger.moved)
+            send_button(finger.x0, finger.y0, 1);
+        finger.down = 0;
+    }
+    if (real) real(self, id, p);
 }
 
 __attribute__((constructor)) static void init(void) {

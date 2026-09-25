@@ -113,7 +113,9 @@ pointing at it): QtCar opens fullscreen on the real screen, no Xvfb, VNC or view
   installs Mesa 18.0.5's `i965` driver (the firmware's own is Mesa 11.2 from 2016 and doesn't know
   newer Intel GPUs, but only up to about the 8th/9th generation: Mesa 18's i965 doesn't know the
   newer Xe GPUs); `/dev/dri` is bound into the chroot. AMD GPUs: `--gpu` (`GPU=on`) tries Mesa
-  18's radeonsi (GCN up to Vega/Raven, not RDNA); untested, so not the default. NVIDIA: software.
+  18's radeonsi (GCN up to Vega/Raven, not RDNA) or r600 (TeraScale: HD 2000-6000); untested, so
+  not the default. The screen has to be on that GPU (the X server runs on it); with several
+  GPUs the first Intel or AMD one is used. NVIDIA: software.
 - The screensaver is off while it runs. Stop with `./tesla stop` from another terminal (or
   Ctrl+C in the start terminal, Alt+Tab to reach it).
 - Tested on a ThinkPad T480 (1920x1080 touch panel) with a Debian 13 live system: the whole

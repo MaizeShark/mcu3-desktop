@@ -577,18 +577,23 @@ native_gpu() {
     QT_GL=software QT_GL_DRIVER=""
     [ "$GPU" = off ] && { info "OpenGL: software (--no-gpu)"; return; }
     local card vendor driver name
-    card=$(ls -d /sys/class/drm/renderD* 2>/dev/null | head -1)
-    vendor=$(cat "$card/device/vendor" 2>/dev/null)
+    # the first Intel or AMD GPU (a PC can have several, e.g. an NVIDIA card next to it)
+    for card in /sys/class/drm/renderD*; do
+        vendor=$(cat "$card/device/vendor" 2>/dev/null)
+        case "$vendor" in 0x8086|0x1002) break ;; esac
+    done
     case "$vendor" in
         0x8086) driver=i965 name=Intel ;;
         0x1002)
-            # AMD: radeonsi of the kit's Mesa 18.0.5 (a link to its Gallium megadriver) knows GCN
-            # up to Vega/Raven, not the newer RDNA GPUs. Never tested: only when asked for (--gpu)
+            # AMD, Mesa 18.0.5's Gallium drivers (links to the kit's megadriver): radeonsi for GCN
+            # up to Vega/Raven (not RDNA), r600 for the older TeraScale GPUs (HD 2000-6000).
+            # Never tested: only when asked for (--gpu)
+            driver=$(amd_driver "$card")
             if [ "$GPU" != on ]; then
-                info "OpenGL: software (AMD GPU: --gpu tries radeonsi, untested; Mesa 18 knows GCN up to Vega)"
+                info "OpenGL: software (AMD GPU: --gpu tries $driver, untested)"
                 return
             fi
-            driver=radeonsi name=AMD ;;
+            name=AMD ;;
         *)
             info "OpenGL: software (GPU ${vendor:-none}: the kit's Mesa has drivers for Intel and AMD only)"
             return ;;
@@ -600,6 +605,27 @@ native_gpu() {
     done
     QT_GL=hardware QT_GL_DRIVER=$driver
     info "OpenGL: GPU ($name, $driver)"
+}
+
+# amd_driver RENDER_NODE_SYSFS: radeonsi or r600. amdgpu (kernel) runs GCN and newer only; radeon
+# runs TeraScale and the first two GCN generations (SI, CIK), told apart by PCI id.
+amd_driver() {
+    local dev kdrv
+    kdrv=$(basename "$(readlink -f "$1/device/driver")")
+    dev=$(( $(cat "$1/device/device" 2>/dev/null || echo 0) ))
+    if [ "$kdrv" = radeon ]; then
+        # SI: Tahiti, Pitcairn, Cape Verde, Oland, Hainan; CIK: Bonaire, Hawaii, Kaveri, Kabini, Mullins
+        if (( (dev >= 0x6780 && dev <= 0x679f) || (dev >= 0x6800 && dev <= 0x683f) ||
+              (dev >= 0x6600 && dev <= 0x666f) || (dev >= 0x67a0 && dev <= 0x67bf) ||
+              (dev >= 0x1304 && dev <= 0x131d) || (dev >= 0x9830 && dev <= 0x983f) ||
+              (dev >= 0x9850 && dev <= 0x985f) )); then
+            echo radeonsi
+        else
+            echo r600
+        fi
+    else
+        echo radeonsi
+    fi
 }
 
 start_viewer() {
