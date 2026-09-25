@@ -83,7 +83,7 @@ again at any time (it only does what's missing). Groups:
 
 | Group | What |
 |---|---|
-| `core` | binary patches QtCar needs on a PC: cgroup/escalator checks, energy model asserts, fatal asserts made non-fatal |
+| `core` | the one binary patch QtCar needs on a PC: asserts only log (as on the car) instead of crashing |
 | `cef` | the browser: no-sandbox shim, EGL pixmap shim, V8 snapshot files, WebAudio oscillator patch |
 | `mesa` | Mesa 18.0.5 software renderer, LLVM 6.0 and their libraries (open source, downloaded from the Ubuntu 16.04 archive) |
 | `assets` | missing asset links |
@@ -93,7 +93,8 @@ again at any time (it only does what's missing). Groups:
 | `identity` | VIN and birthday files (only with `--vin` / `--birthday`) |
 
 Every binary patch checks the original bytes and the file's SHA-1 first; an unknown firmware
-version is refused. `mcu3_patch.py --list` lists everything. Details and the history of each
+version is refused. Patches of earlier kits that turned out unnecessary are "retired": the kit
+restores the firmware's bytes where it finds them, so an existing image ends up like a fresh one. `mcu3_patch.py --list` lists everything. Details and the history of each
 patch: [`mcu3-patchkit/README.md`](../mcu3-patchkit/README.md).
 
 ## Ports

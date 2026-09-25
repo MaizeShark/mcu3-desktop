@@ -1,4 +1,5 @@
-// LD_PRELOAD shim: emulate EGL images from X pixmaps for QtCar's browser view.
+// LD_PRELOAD shim: emulate EGL images from X pixmaps for QtCar's browser view (and keep the
+// browser's window away from a desktop's window manager, see XMapWindow below).
 //
 // QtCar shows the Chromium (CEF) browser by wrapping the browser's X pixmap in an EGLImage
 // (EglImageBuffer::createImageFromNativePixmap -> eglCreateImageKHR(EGL_NATIVE_PIXMAP_KHR)) and
@@ -235,6 +236,86 @@ fnptr eglGetProcAddress(const char *name) {
         return (fnptr)my_target;
     }
     return real;
+}
+
+// The browser's own X window. Chromium (inside QtCar) maps a plain top-level window for the
+// page, without WM_CLASS; QtCar redirects it with XComposite and draws its pixmap itself. On the
+// car there's no window manager. On a desktop (./tesla start --native) the window manager framed
+// it at once: a stray "Untitled window" on screen and a black page in QtCar (the named pixmap
+// goes stale when the window is reparented). So such windows become override-redirect before
+// they're mapped, as if there were no window manager, and lowered below QtCar's window (a
+// compositing window manager would draw them on top; on the car QtCar's redirect hides them).
+// QtCar's own window has a WM_CLASS.
+typedef struct { char *res_name, *res_class; } class_hint_t;
+typedef struct {
+    unsigned long background_pixmap, background_pixel, border_pixmap, border_pixel;
+    int bit_gravity, win_gravity, backing_store;
+    unsigned long backing_planes, backing_pixel;
+    int save_under;
+    long event_mask, do_not_propagate_mask;
+    int override_redirect;
+    unsigned long colormap, cursor;
+} set_window_attributes_t;
+#define CW_OVERRIDE_REDIRECT (1L << 9)
+
+// 1 if w is such a window and is now override-redirect
+static int unmanaged(void *dpy, unsigned long w) {
+    static int (*query_tree)(void *, unsigned long, unsigned long *, unsigned long *, unsigned long **, unsigned int *);
+    static int (*class_hint)(void *, unsigned long, class_hint_t *);
+    static int (*change)(void *, unsigned long, unsigned long, set_window_attributes_t *);
+    static int (*xfree)(void *);
+    if (!query_tree) {
+        *(void **)&query_tree = dlsym(RTLD_NEXT, "XQueryTree");
+        *(void **)&class_hint = dlsym(RTLD_NEXT, "XGetClassHint");
+        *(void **)&change = dlsym(RTLD_NEXT, "XChangeWindowAttributes");
+        *(void **)&xfree = dlsym(RTLD_NEXT, "XFree");
+    }
+    if (!query_tree || !class_hint || !change || !xfree)
+        return 0;
+    unsigned long root, parent, *kids = NULL;
+    unsigned int n;
+    if (!query_tree(dpy, w, &root, &parent, &kids, &n))
+        return 0;
+    if (kids)
+        xfree(kids);
+    if (parent != root)
+        return 0;
+    class_hint_t h = {0};
+    if (class_hint(dpy, w, &h)) {    // a named application window (QtCar's): leave it to the WM
+        if (h.res_name) xfree(h.res_name);
+        if (h.res_class) xfree(h.res_class);
+        return 0;
+    }
+    set_window_attributes_t a;
+    memset(&a, 0, sizeof a);
+    a.override_redirect = 1;
+    change(dpy, w, CW_OVERRIDE_REDIRECT, &a);
+    LOG("window 0x%lx: override-redirect, below QtCar (no window manager for the browser's window)\n", w);
+    return 1;
+}
+
+static void lower(void *dpy, unsigned long w) {
+    static int (*real)(void *, unsigned long);
+    if (!real) *(void **)&real = dlsym(RTLD_NEXT, "XLowerWindow");
+    if (real) real(dpy, w);
+}
+
+int XMapWindow(void *dpy, unsigned long w) {
+    static int (*real)(void *, unsigned long);
+    if (!real) *(void **)&real = dlsym(RTLD_NEXT, "XMapWindow");
+    int u = unmanaged(dpy, w);
+    int r = real(dpy, w);
+    if (u) lower(dpy, w);
+    return r;
+}
+
+int XMapRaised(void *dpy, unsigned long w) {
+    static int (*real)(void *, unsigned long);
+    if (!real) *(void **)&real = dlsym(RTLD_NEXT, "XMapRaised");
+    int u = unmanaged(dpy, w);
+    int r = real(dpy, w);
+    if (u) lower(dpy, w);
+    return r;
 }
 
 __attribute__((constructor)) static void init(void) {

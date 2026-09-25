@@ -3,11 +3,12 @@
 Turn a pristine Tesla Model 3 MCU rootfs (firmware 2019.20.4.2, x86_64) into the
 state that runs QtCar in a chroot on a desktop Linux host (see start_all.sh).
 
-Reproduces the working image MCU2/mcu3.ext4 as of 2026-05-31:
-  * byte patches in QtCar, libQtCarGUI, libQtCarUtils, libQtCarMediaV2, chrome-sandbox
-  * Mesa 18.0.5 software renderer + LLVM 6.0 + deps (downloaded per sources.toml, cached in payload/)
-  * icu_preload.so and the fake chrome-sandbox (built from src/)
-  * config / directories / symlinks / startup script
+  * 5 byte patches: libQtCarUtils (asserts only log), libcef (WebAudio oscillator),
+    libQtCarSim (no drive inverter), audiod (no A2B); patches of earlier kits that turned out
+    unnecessary are restored to the firmware's bytes where found ('retired')
+  * Mesa 18.0.5 + LLVM 6.0 + deps (downloaded per sources.toml, cached in payload/)
+  * preload shims built from src/ (icu_preload, egl_pixmap_shim, cef_nosandbox)
+  * config / directories / symlinks / startup script / qtcar-service
 
 Usage:
   sudo python3 mcu3_patch.py /path/to/rootfs              # apply everything
@@ -43,73 +44,69 @@ BINARIES = [
     {
         'path': 'usr/tesla/UI/bin/QtCar',
         'sha1_orig': '53f1c1bd1770fe5528ab29f2d797ef7b645f41db',
-        'sha1_patched': 'a077aed0b6a66b5fcf03cc16dd5f41b11bdb2685',
-        'patches': [
+        'patches': [],
+        # the escalator's cgroup setup succeeds in the chroot (./tesla start mounts net_cls; QtCar
+        # ends up in net_cls:/qtcar), so QtCar's exit(1) on failure never happens (2026-09-25)
+        'retired': [
             ('qtcar-cgroup-exit-1', 'core', 0x2ea5e5, 'e80645f7ffbf01000000e85c48f7ff', '9090909090bf010000009090909090',
-             'ChromiumManager::initializeCef: NOP perror("failed to set internet-cgroups") + exit(1)'),
+             'ChromiumManager::initializeCef: perror("failed to set internet-cgroups") + exit(1)'),
             ('qtcar-cgroup-exit-2', 'core', 0x2ea691, 'e85a44f7ffe94f', '9090909090e959',
-             'ChromiumManager::initializeCef: NOP perror("failed to set qtcar-cgroups"), jump past exit(1)'),
+             'ChromiumManager::initializeCef: perror("failed to set qtcar-cgroups") + exit(1)'),
         ],
     },
     {
         'path': 'usr/tesla/UI/lib/libQtCarGUI.so.1.0.0',
         'sha1_orig': 'df5b74322502ea348e259d1c3b432c1e0c0b4421',
-        'sha1_patched': '54f2e657cc248d7a93429aab80476e23243d7cf8',
         'patches': [
-            ('gui-escalator-1', 'core', 0x7c26a3, 'e8d89bf1ff', '31c0909090',
-             'ChromiumManager::initializeCef: Escalator::runCommand() -> 0 (cgroup setup "succeeds")'),
-            ('gui-escalator-2', 'core', 0x7c295f, 'e81c99f1ff', '31c0909090',
-             'ChromiumManager::initializeCef: Escalator::runCommand() -> 0 (cgroup setup "succeeds")'),
-            ('gui-cgroup-exit-1', 'core', 0x7c32a5, 'e81609f2ffbf01000000e8cc99f2ff', '9090909090bf010000009090909090',
-             'ChromiumManager::initializeCef: NOP perror("failed to set internet-cgroups") + exit(1)'),
-            ('gui-cgroup-exit-2', 'core', 0x7c3351, 'e86a08f2ffe94f', '9090909090e959',
-             'ChromiumManager::initializeCef: NOP perror("failed to set qtcar-cgroups"), jump past exit(1)'),
-            # the old "no cameras" stubs, from when asserts were fatal: without a camera QtCar now
-            # only logs non-fatal V4L2 asserts and retries. The backup camera works through
-            # [bkcam] in settings.conf (start_all.sh CAMERA=...), so undo them.
-            ('gui-camera-reset-revert', 'core', 0xd3f760, '31c0c3', '4155be',
-             'undo the old "gui-camera-reset" stub (CameraStream::resetDevice() -> return 0)'),
-            ('gui-camera-init-revert', 'core', 0xd43000, '31c0c3', '55beff',
-             'undo the old "gui-camera-init" stub (CameraStream::initDevice() -> return 0)'),
+        ],
+        # patches of earlier kits that do nothing (or no longer apply): put back where found.
+        # (id, group, offset, firmware bytes, bytes an earlier kit wrote, why)
+        'retired': [
+            # an assert only logs (utils-assert-nonfatal); the branch logs and continues
             ('gui-energy-roadload', 'core', 0xd75ed8, '0f8502020000', '909090909090',
-             'EnergyModelUtils::roadLoadEstimateFor: NOP carType assertion branch'),
-            ('gui-energy-driveunit', 'core', 0xd7617d, '7571', '9090',
-             'EnergyModelUtils::driveUnitConfig: NOP carType assertion branch'),
-            ('gui-energy-pack', 'core', 0xd762af, '752f', '9090',
-             'EnergyModelUtils::packEnergy_kWh: NOP carType assertion branch'),
-            # an earlier session patched the unused "gst-launch-1.0 ... ! xvimagesink" string here
-            # (the videos are played by /usr/bin/tvideo, started by the escalator); undo it
-            ('gui-video-ximagesink-revert', 'core', 0x12f2e93, b'ximagesink\0'.hex(), b'xvimagesink'.hex(),
-             'undo the old "gui-video-ximagesink" patch (that pipeline string is not used)'),
-            ('gui-cef-nosandbox-revert', 'cef', 0x12ae593, '41c7431001000000', '498d7c2408498d75',
-             'undo the old "gui-cef-nosandbox" patch (restore the original argument setup of the '
-             'cef_initialize() call). It never had an effect: QtCar uses its own copy of '
-             'ChromiumManager::initializeCef. no_sandbox is set by src/cef_nosandbox.c instead'),
+             'EnergyModelUtils::roadLoadEstimateFor: carType assert (hid a log line)'),
+            ('gui-energy-driveunit', 'core', 0xd7617d, '7571', '9090', 'EnergyModelUtils::driveUnitConfig: same'),
+            ('gui-energy-pack', 'core', 0xd762af, '752f', '9090', 'EnergyModelUtils::packEnergy_kWh: same'),
+            ('gui-escalator-1', 'core', 0x7c26a3, 'e8d89bf1ff', '31c0909090',
+             'libQtCarGUI\'s ChromiumManager::initializeCef is never called: QtCar has its own copy'),
+            ('gui-escalator-2', 'core', 0x7c295f, 'e81c99f1ff', '31c0909090', 'same'),
+            ('gui-cgroup-exit-1', 'core', 0x7c32a5, 'e81609f2ffbf01000000e8cc99f2ff', '9090909090bf010000009090909090',
+             'same (qtcar-cgroup-exit-* patch the copy in QtCar)'),
+            ('gui-cgroup-exit-2', 'core', 0x7c3351, 'e86a08f2ffe94f', '9090909090e959', 'same'),
+            ('gui-camera-reset', 'core', 0xd3f760, '4155be', '31c0c3',
+             'the old "no cameras" stub CameraStream::resetDevice() -> 0 (the backup camera works)'),
+            ('gui-camera-init', 'core', 0xd43000, '55beff', '31c0c3', 'the old stub CameraStream::initDevice() -> 0'),
+            ('gui-video-ximagesink', 'core', 0x12f2e93, b'xvimagesink'.hex(), b'ximagesink\0'.hex(),
+             'a gst-launch pipeline string nobody uses (the videos play in /usr/bin/tvideo)'),
+            ('gui-cef-nosandbox', 'cef', 0x12ae593, '498d7c2408498d75', '41c7431001000000',
+             'no_sandbox in the library\'s initializeCef copy (unused); src/cef_nosandbox.c sets it'),
         ],
     },
     {
         'path': 'usr/tesla/UI/lib/libQtCarUtils.so.1.0.0',
         'sha1_orig': '7286a3e0c86b69962ea1b102c48aa69432852fce',
-        'sha1_patched': '244b52bb2d5968454b245a18493b8d674cc41384',
         'patches': [
-            ('utils-assert-ctor', 'core', 0xaf0ea, 'e87113feff', '9090909090',
-             'DataValue::DataValue: NOP Logger::logAssert'),
             ('utils-assert-nonfatal', 'core', 0xb4703, 'c604', 'eb0b',
              'Logger::logAssert: skip the deliberate write to address 0 outside "prod" mode, so a '
              'failed assert is only logged, like on the car (was: media button asserts crashed QtCar)'),
+        ],
+        # NOPs of single logAssert calls: with logAssert log-only they only hid a log line
+        'retired': [
+            ('utils-assert-ctor', 'core', 0xaf0ea, 'e87113feff', '9090909090', 'DataValue::DataValue: logAssert'),
             ('utils-assert-protected', 'core', 0xaf69f, 'e8bc0dfeff', '9090909090',
-             'DataValue::setValueNoLock: NOP "protected DataValue" assertion'),
+             'DataValue::setValueNoLock: "protected DataValue" logAssert'),
             ('utils-assert-duplicate', 'core', 0xc3997, 'e8c4cafcff', '9090909090',
-             'DataValueManager::addValue: NOP "Duplicate data value" assertion'),
+             'DataValueManager::addValue: "Duplicate data value" logAssert'),
         ],
     },
     {
         'path': 'usr/tesla/UI/lib/libQtCarMediaV2.so.1.0.0',
         'sha1_orig': '89923a08454a1b9dd459a389184806c1eef1b14f',
-        'sha1_patched': '1d886d9ef738f2c924f76d9ee1de9744b3fd859b',
         'patches': [
+        ],
+        'retired': [
             ('media-assert-pause', 'core', 0x463763, 'e8680df8ff', '9090909090',
-             'MediaV2::MediaMasterSourceController::pause: NOP Logger::logAssert'),
+             'MediaV2::MediaMasterSourceController::pause: logAssert (only hid a log line)'),
         ],
     },
     {
@@ -120,7 +117,6 @@ BINARIES = [
         # (fingerprinting / bot detection), tesla.com too. createOscillator() now returns null.
         'path': 'usr/lib/libcef.so',
         'sha1_orig': '975741de4fff287a55d498cf137e104623d23852',
-        'sha1_patched': 'e282344d12925e0f7f1de07562fed179b08a9a34',
         'patches': [
             ('cef-no-oscillator', 'cef', 0x8170490, '554889', '31c0c3',
              'BaseAudioContext::createOscillator() -> return null (WebAudio FFT is a stub in this build)'),
@@ -133,7 +129,6 @@ BINARIES = [
         # the DI frames instead, so the sim's DI module is switched off.
         'path': 'usr/tesla/UI/lib/libQtCarSim.so.1.0.0',
         'sha1_orig': '96bcf8a90c03a7fa2183e9a62d53121ae1e31a26',
-        'sha1_patched': '68ff793b250062cace5c80a3ebd0cf0e97d343ee',
         'patches': [
             ('sim-no-di-2hz', 'vehicle', 0x51cd60, '4155b908', 'c355b908',
              'SimDriveInverter::send2Hz() -> return (no DI frames from the simulator)'),
@@ -148,24 +143,9 @@ BINARIES = [
         # amp output alone is enough on a PC, so never start A2B.
         'path': 'usr/bin/audiod',
         'sha1_orig': '0ef70bcffe81e771d3b042970e972a3cbffc79e2',
-        'sha1_patched': '3d9650db745f4840c64d8a8819cec87af88a8171',
         'patches': [
             ('audiod-no-a2b', 'audio', 0xa0aa, '488d0d', '31c0c3',
              'audiod: "is the A2B device pumping" -> 0, no A2B stack (no /dev/i2c-4 on a PC)'),
-        ],
-    },
-    {
-        # Patched copy of the stock /usr/lib/chrome-sandbox (original stays untouched).
-        'path': 'usr/tesla/UI/lib/chrome-sandbox',
-        'copy_from': 'usr/lib/chrome-sandbox',
-        'mode': 0o4755,  # setuid, like the stock one
-        'sha1_orig': 'b5ac2be8cab5ae3d4f8c6aadd68a6beed24d174c',
-        'sha1_patched': '1cd28793ee7ebb990764155ffa47692f493584bf',
-        'patches': [
-            ('sandbox-cgroup-open', 'cef', 0xf06, '79', 'eb', 'cgroup open check: jns -> jmp'),
-            ('sandbox-cgroup-write', 'cef', 0xf26, '74', 'eb', 'cgroup write check: je -> jmp'),
-            ('sandbox-minijail', 'cef', 0xfa8, 'e873fdffff4889dfe8dbfdffff', '90909090904889df9090909090',
-             'NOP minijail_namespace_ipc() and minijail_enter()'),
         ],
     },
 ]
@@ -198,14 +178,20 @@ PAYLOAD_FILES = [
     # Passes an fd for icudtl.dat to CEF (fixes "Invalid file descriptor to ICU data"). src/icu_preload.c
     # Was /tmp/icu_preload.so in the original setup; moved out of /tmp so it can't get cleaned away.
     ('system', 'usr/lib/icu_preload.so', 0o755, 'a3da594a29ad33acc8ab61fa57e1139759804e4b'),
-    # Dummy SUID sandbox that just execv()s its arguments. src/fake_sandbox.c
-    ('cef', 'usr/tesla/UI/bin/chrome-sandbox', 0o4755, '4473b1e612a7c84db87491f9a6c2f0d9ee1032c5'),
     # Shows the browser: emulates EGL images from X pixmaps, which Xvfb + Mesa swrast can't do.
     # Always built from src/egl_pixmap_shim.c (no fixed hash).
     ('cef', 'usr/lib/egl_pixmap_shim.so', 0o755, '-'),
     # Sets CefSettings.no_sandbox (and optional CEF logging / DevTools) via a cef_initialize()
     # wrapper. Always built from src/cef_nosandbox.c.
     ('cef', 'usr/lib/cef_nosandbox.so', 0o755, '-'),
+]
+
+# Files earlier kits added that aren't needed: removed where found (with their .orig backups).
+# They aren't in the firmware, so whatever is there is the kit's. (group, path, why)
+RETIRED_FILES = [
+    ('cef', 'usr/tesla/UI/bin/chrome-sandbox',
+     'fake setuid sandbox helper: CEF runs with no_sandbox (src/cef_nosandbox.c) and never starts it'),
+    ('cef', 'usr/tesla/UI/lib/chrome-sandbox', 'patched copy of /usr/lib/chrome-sandbox, unused for the same reason'),
 ]
 
 # (group, link path, target)
@@ -394,7 +380,7 @@ pcm.!auc {
 '''
 
 GROUPS = {
-    'core': 'binary patches needed for QtCar to start (cgroups, cameras, energy model, asserts)',
+    'core': 'binary patches needed for QtCar to run (asserts only log, as on the car)',
     'cef': 'browser/CEF: no-sandbox shim, EGL pixmap shim, WebAudio oscillator patch, CEF symlinks',
     'mesa': 'Mesa 18 software renderer + LLVM 6.0 and dependencies',
     'assets': 'missing asset symlinks (Model S badge -> Model 3, roof_glass)',
@@ -466,53 +452,65 @@ class Runner:
         self.section('Binary patches')
         for b in BINARIES:
             patches = [x for x in b['patches'] if not self.skipped(x[1], x[0])]
-            if not patches:
-                continue
+            retired = b.get('retired', [])
             path = self.p(b['path'])
-            src = self.p(b.get('copy_from', b['path']))
-            existing = os.path.exists(path)
-            if not existing and not os.path.exists(src):
+            if not os.path.exists(path):
                 self.report('error', f"{b['path']}: file not found")
                 continue
-            data = bytearray(open(path if existing else src, 'rb').read())
+            data = bytearray(open(path, 'rb').read())
             base_sha = sha1(data)
-            if base_sha == b['sha1_patched']:
-                self.report('ok', f"{b['path']} (identical to working image, {len(patches)} patches)")
-                continue
-            if base_sha != b['sha1_orig'] and not self.partially_patched(data, b['patches']):
+            if base_sha != b['sha1_orig'] and not self.partially_patched(data, b['patches'] + retired):
                 self.report('error', f"{b['path']}: unknown file version (sha1 {base_sha}), not touching it")
                 continue
             changed = False
-            for ident, group, off, old, new, desc in patches:
-                old, new = bytes.fromhex(old), bytes.fromhex(new)
-                cur = bytes(data[off:off + len(old)])
-                label = f"{b['path']} @0x{off:x} {ident}: {desc}"
-                if cur == new:
-                    self.report('ok', label)
-                elif cur == old:
+            # (id, offset, bytes found = ok, bytes to replace, what to write, label)
+            todo = [(i, off, new, old, new, f"{b['path']} @0x{off:x} {i}: {d}") for i, g, off, old, new, d in patches]
+            todo += [(i, off, orig, old, orig, f"{b['path']} @0x{off:x} {i} (retired, restoring the firmware's "
+                      f"bytes): {d}") for i, g, off, orig, old, d in retired]
+            for ident, off, good, bad, write, label in todo:
+                good, bad = bytes.fromhex(good), bytes.fromhex(bad)
+                cur = bytes(data[off:off + len(good)])
+                if cur == good:
+                    # a retired patch that isn't there is nothing to mention
+                    if ident not in {x[0] for x in retired}:
+                        self.report('ok', label)
+                elif cur == bad:
                     if self.check:
                         self.report('todo', label)
                     else:
-                        data[off:off + len(old)] = new
+                        data[off:off + len(good)] = good
                         changed = True
                         self.report('done', label)
                 else:
                     self.report('error', f'{label} -- unexpected bytes {cur.hex()}')
-            if changed or (not existing and not self.check):
-                if existing:
-                    self.backup_file(path)
-                mode = b.get('mode') or os.stat(path if existing else src).st_mode & 0o7777
-                self.write_atomic(path, bytes(data), mode)
-                if sha1(data) == b['sha1_patched']:
-                    print(f"            -> {b['path']} now identical to working image")
+            if changed:
+                self.backup_file(path)
+                self.write_atomic(path, bytes(data), os.stat(path).st_mode & 0o7777)
 
     @staticmethod
     def partially_patched(data, patches):
-        for _, _, off, old, new, _ in patches:
-            cur = bytes(data[off:off + len(bytes.fromhex(old))])
-            if cur not in (bytes.fromhex(old), bytes.fromhex(new)):
+        for _, _, off, a, b, _ in patches:
+            cur = bytes(data[off:off + len(bytes.fromhex(a))])
+            if cur not in (bytes.fromhex(a), bytes.fromhex(b)):
                 return False
         return True
+
+    def retired_files(self):
+        """Remove files earlier kits added that aren't needed any more (RETIRED_FILES)."""
+        self.section('Retired files')
+        for group, rel, why in RETIRED_FILES:
+            if self.skipped(group):
+                continue
+            for f in (rel, rel + '.orig'):
+                path = self.p(f)
+                if not os.path.lexists(path):
+                    continue
+                label = f'{f} (retired: {why})'
+                if self.check:
+                    self.report('todo', 'remove ' + label)
+                else:
+                    os.unlink(path)
+                    self.report('done', 'removed ' + label)
 
     # -- payload -------------------------------------------------------------
     def payload(self):
@@ -711,7 +709,6 @@ class Runner:
 # from a current host needs glibc >= 2.34, the chroot has 2.22.
 BUILDABLE = {
     'usr/lib/icu_preload.so': ('src/icu_preload.c', ['-shared', '-fPIC', '-O2']),
-    'usr/tesla/UI/bin/chrome-sandbox': ('src/fake_sandbox.c', ['-static', '-O2']),
     'usr/lib/egl_pixmap_shim.so': ('src/egl_pixmap_shim.c', ['-shared', '-fPIC', '-O2']),
     'usr/lib/cef_nosandbox.so': ('src/cef_nosandbox.c', ['-shared', '-fPIC', '-O2']),
 }
@@ -928,9 +925,14 @@ def list_all():
         print(f'  {g:9} {d}')
     print('\nBinary patches (ids also usable with --skip):')
     for b in BINARIES:
-        print(f"  {b['path']}" + (f"  (patched copy of {b['copy_from']})" if 'copy_from' in b else ''))
+        print(f"  {b['path']}")
         for ident, group, off, old, new, desc in b['patches']:
             print(f'    {ident:24} [{group}] 0x{off:x}: {desc}')
+        for ident, group, off, orig, old, desc in b.get('retired', []):
+            print(f'    {ident:24} retired, restored where found: {desc}')
+    print('\nRetired files (removed where found):')
+    for group, rel, why in RETIRED_FILES:
+        print(f'  [{group}] {rel}: {why}')
     print('\nPayload files:')
     for group, rel, mode, _ in PAYLOAD_FILES:
         print(f'  [{group}] {rel} ({oct(mode)})')
@@ -980,6 +982,7 @@ def main():
     r = Runner(root, args.check, not args.no_backup, args.skip, args.quiet)
     print(f'Rootfs: {root}' + ('  (check only)' if args.check else ''))
     r.binaries()
+    r.retired_files()
     r.payload()
     r.symlinks()
     r.system()

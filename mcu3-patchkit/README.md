@@ -1,8 +1,33 @@
 # mcu3-patchkit
 
 Rebuilds the working Tesla Model 3 MCU chroot (firmware 2019.20.4.2) from the pristine
-dump in `../mcu3-original`. Output matches `MCU2/mcu3.ext4` as of 2026-05-31. All
-5 patched binaries come out byte-identical to that image.
+dump in `../mcu3-original`: 5 byte patches in 4 binaries, preload shims, open-source libraries,
+config. `mcu3_patch.py --list` shows everything.
+
+## The binary patches
+
+| Patch | File | Why |
+|---|---|---|
+| `utils-assert-nonfatal` | libQtCarUtils | `Logger::logAssert` writes to address 0 on purpose outside "prod" mode; now it only logs, as on the car |
+| `cef-no-oscillator` | libcef | Tesla's CEF has Blink's stub FFT: a WebAudio oscillator crashed the renderer |
+| `sim-no-di-2hz`, `sim-no-di-10hz` | libQtCarSim | the simulator's drive inverter sends a wrong gear/speed; tesla-can.py sends those frames |
+| `audiod-no-a2b` | audiod | no A2B amplifier bus on a PC (audiod exited) |
+
+**Retired** (2026-09-25): 17 patches and 2 files of earlier kits did nothing or only hid log
+lines. The kit puts the firmware's bytes back where it finds them, and removes the files:
+- `qtcar-cgroup-exit-1/2`: QtCar exits if the escalator can't put it into its cgroups. It can
+  (`./tesla start` mounts net_cls; QtCar lands in `net_cls:/qtcar`).
+- `gui-escalator-*`, `gui-cgroup-exit-*`, `gui-cef-nosandbox`: patched libQtCarGUI's copy of
+  `ChromiumManager::initializeCef`, which is never called (QtCar has its own).
+- `utils-assert-ctor/-protected/-duplicate`, `media-assert-pause`, `gui-energy-*`: each skipped
+  one `logAssert` call; with `utils-assert-nonfatal` that only hid a log line. None of them fired
+  in test runs.
+- `gui-camera-reset/-init`, `gui-video-ximagesink`: undone before already (the old `*-revert`).
+- `UI/bin/chrome-sandbox` (fake setuid helper) and `UI/lib/chrome-sandbox` (patched copy): CEF
+  runs with `no_sandbox` and never starts a sandbox helper.
+Tried instead of the assert patch: QtCar's `--prod` switch. It makes asserts non-fatal too, but
+changes feature defaults (vector map tiles on: an empty map) and would be needed by every
+service; one 2-byte patch is simpler.
 
 ## Contents
 
@@ -11,7 +36,8 @@ dump in `../mcu3-original`. Output matches `MCU2/mcu3.ext4` as of 2026-05-31. Al
 | `mcu3_patch.py` | Applies everything. Idempotent, checks every patch's original bytes and SHA-1 first |
 | `sources.toml` | Where each library comes from: Ubuntu 16.04 package URL, sha256, path inside the package |
 | `src/icu_preload.c` | Source of `icu_preload.so` (verified: compiles to the same code) |
-| `src/fake_sandbox.c` | Reconstructed source of `/usr/tesla/UI/bin/chrome-sandbox` (verified: same code) |
+| `src/egl_pixmap_shim.c` | Preloaded into QtCar: shows the browser's picture (EGL images from X pixmaps without DRI) and keeps the browser's window away from a desktop's window manager |
+| `src/cef_nosandbox.c` | Preloaded into QtCar: `CefSettings.no_sandbox`, CEF logging, DevTools |
 
 ### Where payload files come from
 
@@ -23,14 +49,11 @@ file, `mcu3_patch.py` tries in order:
    archive with `member` naming the file inside. Packages are cached in `downloads/`. The
    download is checked against `sha256` and the extracted file against the exact hash in
    `mcu3_patch.py`;
-3. for `icu_preload.so`, `egl_pixmap_shim.so`, `cef_nosandbox.so` and the fake `chrome-sandbox`:
-   compiled from `src/` with gcc.
+3. for `icu_preload.so`, `egl_pixmap_shim.so` and `cef_nosandbox.so`: compiled from `src/` with
+   gcc (the kit refuses a result that needs a glibc newer than the chroot's 2.22).
 
-Tested 2026-09-24: all 21 files obtained into an empty `payload/` (17 downloaded, 4 built).
-
-The fake `chrome-sandbox` of the old May image was built dynamically on a modern host and needs glibc ≥ 2.34,
-but the chroot has 2.22, so it can't run there. The fallback build links it statically, which
-avoids this. (With `cef_nosandbox.so` CEF doesn't use it anymore.)
+Tested 2026-09-24: all files obtained into an empty `payload/` (then 17 downloaded, 4 built; the
+fake chrome-sandbox is gone since).
 
 ## Build a fresh image
 
@@ -65,7 +88,7 @@ sudo python3 mcu3_patch.py ROOT --check    # report only, changes nothing (text 
 sudo python3 mcu3_patch.py ROOT -q         # only what isn't already ok
 python3 mcu3_patch.py --kit-version        # the current kit version
 sudo python3 mcu3_patch.py ROOT            # apply
-sudo python3 mcu3_patch.py ROOT --skip cef --skip gui-camera-init-revert
+sudo python3 mcu3_patch.py ROOT --skip cef --skip sim-no-di-2hz
 sudo python3 mcu3_patch.py ROOT --vin ... --birthday ...
 ```
 
@@ -90,9 +113,9 @@ mounted inside ROOT, so stop QtCar first (`./tesla stop`). Patched and replaced 
     `cef_initialize()` wrapper. Env: `CEF_LOG_SEVERITY` (startup.sh: warning), `CEF_LOG_FILE`,
     `CEF_REMOTE_DEBUGGING_PORT` (startup.sh: 9222, DevTools on localhost:
     `curl http://127.0.0.1:9222/json`), `CEF_EXTRA_ARGS` (Chromium switches).
-  - The old `gui-cef-nosandbox` patch is reverted (`gui-cef-nosandbox-revert`): it patched
-    libQtCarGUI's copy of `ChromiumManager::initializeCef`, but QtCar uses its own copy, so it
-    never did anything. The same holds for `gui-escalator-*` and `gui-cgroup-exit-*` (harmless).
+  - The old `gui-cef-nosandbox` patch never did anything: it patched libQtCarGUI's copy of
+    `ChromiumManager::initializeCef`, but QtCar uses its own copy (retired, like
+    `gui-escalator-*` and `gui-cgroup-exit-*`).
   - `UI/lib/libcef.so` links to `/usr/lib/libcef.so` and CEF looks for its resources next to it;
     `v8_context_snapshot.bin` (plus `devtools_resources.pak`, `swiftshader`) were missing there
     and every renderer died with "Failed to deserialize the V8 snapshot blob".
