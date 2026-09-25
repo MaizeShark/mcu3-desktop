@@ -31,7 +31,7 @@ Screen and access:
   --vnc                  the virtual screen over VNC (default)
   --touch-device DEV     native: the touchscreen (default: found automatically)
   --no-gpu, --gpu        native: OpenGL in software instead of on the GPU (default: the GPU when
-                         it's an Intel one, which the firmware's Mesa drivers support)
+                         it's an Intel one; --gpu also tries an AMD one, untested)
   --size WxH             the UI's size (default 1920x1200, the car's screen)
   --viewer CMD|none      VNC viewer to open (default: krdc, remote-viewer, remmina or vncviewer)
   --remote               VNC (password: x11vnc -storepasswd) and panel reachable from the network
@@ -576,20 +576,30 @@ print('%f,0,%f,0,%f,%f,0,0,1' % (s, -(pw - uw / s) / 2 * s, s, -(ph - uh / s) / 
 native_gpu() {
     QT_GL=software QT_GL_DRIVER=""
     [ "$GPU" = off ] && { info "OpenGL: software (--no-gpu)"; return; }
-    local card vendor
+    local card vendor driver name
     card=$(ls -d /sys/class/drm/renderD* 2>/dev/null | head -1)
     vendor=$(cat "$card/device/vendor" 2>/dev/null)
-    if [ "$vendor" != 0x8086 ]; then
-        info "OpenGL: software (GPU ${vendor:-none}: only Intel GPUs have a driver in the firmware's Mesa)"
-        return
-    fi
+    case "$vendor" in
+        0x8086) driver=i965 name=Intel ;;
+        0x1002)
+            # AMD: radeonsi of the kit's Mesa 18.0.5 (a link to its Gallium megadriver) knows GCN
+            # up to Vega/Raven, not the newer RDNA GPUs. Never tested: only when asked for (--gpu)
+            if [ "$GPU" != on ]; then
+                info "OpenGL: software (AMD GPU: --gpu tries radeonsi, untested; Mesa 18 knows GCN up to Vega)"
+                return
+            fi
+            driver=radeonsi name=AMD ;;
+        *)
+            info "OpenGL: software (GPU ${vendor:-none}: the kit's Mesa has drivers for Intel and AMD only)"
+            return ;;
+    esac
     sudo mkdir -p "$CHROOT/dev/dri" && sudo mount --bind /dev/dri "$CHROOT/dev/dri" || return
     local f
     for f in /dev/dri/card* /dev/dri/renderD*; do
         sudo setfacl -m u:1111:rw,u:1226:rw,u:1980:rw "$f" && echo "ACL=$f" >>"$LOG_DIR/state"
     done
-    QT_GL=hardware QT_GL_DRIVER=i965
-    info "OpenGL: GPU (Intel, i965)"
+    QT_GL=hardware QT_GL_DRIVER=$driver
+    info "OpenGL: GPU ($name, $driver)"
 }
 
 start_viewer() {
