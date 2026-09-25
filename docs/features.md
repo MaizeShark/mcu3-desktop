@@ -108,8 +108,9 @@ charging, lights, outside temperature, tire pressures, telltales.
 - Panel: http://localhost:8099/ (see [usage.md](usage.md#the-web-panel)).
 - The car's look: `--color`, `--wheels`, `--performance`. QtCar reads it at startup.
 - Logs: `qtcar-sim.log`, `qtcar-vehicle.log`, `can.log` (what tesla-can.py sends and answers).
-- Limits: seat heaters and climate requests aren't answered; TPMS warnings don't trigger; the
-  charging screen shows "+0 mi" added. Details: [`vehicle/README.md`](../vehicle/README.md).
+  Climate: power, fan speed, air distribution, recirculation and A/C are answered like the car's
+  climate controller would; seat heaters and temperatures work in the UI (nothing heats).
+- Limits: TPMS warnings don't trigger; the charging screen shows "+0 mi" added. Details: [`vehicle/README.md`](../vehicle/README.md).
 
 ## GPS
 

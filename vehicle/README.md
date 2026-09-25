@@ -114,9 +114,14 @@ QtCarVehicle sends the requests as CAN frames to the gateway, UDP broadcast to *
 `bus << 12 | CAN id`, e.g. `0x4273` = bus 4, `UI_vehicleControl` 0x273). The sim ignores them, so
 `tesla-can.py --respond` (`./tesla start` sets it) answers like the car's ECUs would (`RESPONSES`):
 `UI_frunkRequest` -> frunk opens, `UI_trunkRequest` -> trunk opens/closes, `UI_lockRequest` ->
-lock, `UI_lightSwitch` -> head/parking lights, `UI_frontFogSwitch`, `UI_open/closeChargePortDoorRequest`.
-More candidates in `UI_vehicleControl` (seat heaters, wipers, mirrors), `UI_vehicleControl2`
-(glovebox), `UI_chargeRequest` (0x333), `UI_hvacRequest` (0x2f3):
+lock, `UI_lightSwitch` -> head/parking lights, `UI_frontFogSwitch`, `UI_open/closeChargePortDoorRequest`,
+the wipers, and the climate: `UI_hvacRequest` (0x2f3: power, fan speed, air distribution,
+recirculation, A/C, second row) -> `VCRIGHT_hvacFeedback` (0x243), which the climate panel shows
+(fan speed "3" when AUTO; before, the simulator's fixed "2" and "on" regardless of the UI).
+The temperature setpoints and the seat heaters need no answer: the UI keeps them itself
+(`GUI_hvacLeftTempRequest`, `GUI_seatHeaterRequest*`) and only sends requests.
+More candidates in `UI_vehicleControl` (mirrors), `UI_vehicleControl2` (glovebox),
+`UI_chargeRequest` (0x333):
 `vehicle/can-sniff.py --ports 4321` shows them (the port-4321 header also has the bus: `0x4273`).
 
 The BRAKE/ESP telltales (`ESPStatusMessage::processMessage`, 0x145, only with the drive rail on):

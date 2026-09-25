@@ -93,6 +93,11 @@ def _toggle(name):
     return lambda v, cur: {name: "false" if str(cur.get(name, "false")).lower() == "true" else "true"}
 
 
+def _blower(req):
+    """The fan speed the car runs at for a requested one (AUTO: 3)."""
+    return {"VCRIGHT_hvacBlowerSegment": "3" if req in ("AUTO", "SNA") else req}
+
+
 RESPONSES = {
     "UI_frunkRequest": ("edge", lambda v, cur: {"SIM_frontTrunk": "true"}),
     "UI_trunkRequest": ("edge", _toggle("SIM_rearTrunk")),        # no power liftgate: open, or close again
@@ -108,6 +113,18 @@ RESPONSES = {
         "OFF": "PARK", "AUTO": "INT_AUTO_LOW", "SLOW_INTERMITTENT": "INTERMITTENT_LOW",
         "FAST_INTERMITTENT": "INTERMITTENT_HIGH", "SLOW_CONTINUOUS": "CONT_SLOW",
         "FAST_CONTINUOUS": "CONT_FAST"}[v]} if v not in ("SNA",) else {}),
+    # climate (UI_hvacRequest 0x2f3) -> the right body controller's feedback (0x243, in the sim's
+    # frames), which the climate panel shows (fan speed, A/C, ...). AUTO: what a car might pick.
+    # "req:NAME" in cur = the UI's last request of that signal.
+    "UI_hvacReqUserPowerState": ("level", lambda v, cur: {"VCRIGHT_hvacPowerState": "OFF", "VCRIGHT_hvacBlowerSegment": "OFF",
+                                                          "VCRIGHT_hvacACRunning": "OFF"} if v == "OFF" else
+                                 {"VCRIGHT_hvacPowerState": v, **_blower(cur.get("req:UI_hvacReqBlowerSegment", "AUTO"))}),
+    "UI_hvacReqBlowerSegment": ("level", lambda v, cur: _blower(v) if cur.get("req:UI_hvacReqUserPowerState") != "OFF" else {}),
+    "UI_hvacReqAirDistributionMode": ("level", lambda v, cur: {
+        "VCRIGHT_hvacAirDistributionMode": "PANEL_FLOOR" if v == "AUTO" else v.replace("MANUAL_", "")}),
+    "UI_hvacReqRecirc": ("level", lambda v, cur: {"VCRIGHT_hvacRecirc": v}),
+    "UI_hvacReqSecondRowState": ("level", lambda v, cur: {"VCRIGHT_hvacSecondRowState": v}),
+    "UI_hvacReqACDisable": ("level", lambda v, cur: {"VCRIGHT_hvacACRunning": "OFF" if v == "OFF" else "ON"}),
     "UI_openChargePortDoorRequest": ("edge", lambda v, cur: {"SIM_chargePortDoor": "true"}),
     "UI_closeChargePortDoorRequest": ("edge", lambda v, cur: {"SIM_chargePortDoor": "false"}),
 }
@@ -158,7 +175,9 @@ class Responder:
                 kind, fn = RESPONSES[name]
                 if kind == "edge" and v in ("0", "IDLE", "NONE"):
                     continue
-                values = fn(v, dict(self.snd.values, **self.snd.sim.values))
+                cur = dict(self.snd.values, **self.snd.sim.values)
+                cur.update(("req:" + k, x) for k, x in self.last.items())
+                values = fn(v, cur)
                 for k, val in values.items():
                     self.snd.set(k, val)
                 if values:
