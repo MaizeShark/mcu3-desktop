@@ -10,11 +10,15 @@ This watches the X server and takes them back from the window manager: override-
 unmapped, reparented to the root window, mapped again; cobalt at QtCar's place and on top, MAME
 below QtCar with the keyboard focus.
 
-  game-windows.py [--top cobalt] [--hidden MAME] [--tidk DIR] [-v]      (uses $DISPLAY / $XAUTHORITY)
+  game-windows.py [--top cobalt] [--hidden MAME] [--tidk DIR] [--hide-cursor] [-v]   ($DISPLAY, $XAUTHORITY)
 
 --tidk: the folder with QtCar's TIDK_WINDOW_{NAME,LEFT,TOP,WIDTH,HEIGHT} for the game (the
 chroot's /tmp/games/cobalt/tidk). QtCar moves the window there once, when the game starts, and the
 window manager swallows that; so the window named TIDK_WINDOW_NAME is put there.
+
+--hide-cursor: no mouse cursor while this runs, as on the car. On a desktop it stays visible
+(the touchscreen is grabbed by tesla-touch, so X never hides it) and in the arcade it moves:
+QtCar turns the steering wheel into mouse motion with XTest for the trackball games.
 """
 import argparse, ctypes, ctypes.util, os, sys, time
 
@@ -111,6 +115,7 @@ def main():
     ap.add_argument("--hidden", default="MAME", help="windows QtCar shows itself: below QtCar, with the "
                     "keyboard focus for QtCar's XTest keys (name prefixes)")
     ap.add_argument("--tidk", metavar="DIR", help="QtCar's TIDK_WINDOW_* files (where the game window goes)")
+    ap.add_argument("--hide-cursor", action="store_true", help="no mouse cursor while this runs")
     ap.add_argument("-v", action="store_true")
     args = ap.parse_args()
     top_names = tuple(n for n in args.top.split(",") if n)
@@ -118,8 +123,23 @@ def main():
     dpy = X.XOpenDisplay(None)
     if not dpy:
         sys.exit("game-windows: can't open the display")
-    X.XSetErrorHandler(ERROR_HANDLER)
     root = X.XDefaultRootWindow(dpy)
+    if args.hide_cursor:
+        # XFixes: hidden for as long as this client is connected (back when it exits). Needs
+        # version 4, negotiated first (else the server refuses the request).
+        xf = ctypes.CDLL(ctypes.util.find_library("Xfixes") or "libXfixes.so.3")
+        xf.XFixesQueryVersion.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int)]
+        xf.XFixesHideCursor.argtypes = [ctypes.c_void_p, Window]
+        major, minor = ctypes.c_int(6), ctypes.c_int(0)
+        errors = []
+        handler = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)(lambda d, e: errors.append(1) or 0)
+        X.XSetErrorHandler(handler)
+        if xf.XFixesQueryVersion(dpy, ctypes.byref(major), ctypes.byref(minor)) and major.value >= 4:
+            xf.XFixesHideCursor(dpy, root)
+            X.XSync(dpy, 0)
+        print("game-windows: mouse cursor %s (XFixes %d.%d)" % ("hidden" if major.value >= 4 and not errors
+              else "not hidden", major.value, minor.value), file=sys.stderr, flush=True)
+    X.XSetErrorHandler(ERROR_HANDLER)
     taken = {}                                 # window -> "top" | "hidden"
     while True:
         for frame in children(dpy, root)[1]:

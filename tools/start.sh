@@ -472,7 +472,10 @@ start_helpers() {
     fi
     # the arcade's game windows: the car has no window manager, a desktop has one (native screen);
     # on Xvfb it only gives MAME the keyboard focus for QtCar's XTest keys
-    DISPLAY=$QT_DISPLAY python3 tools/game-windows.py --tidk "$CHROOT/tmp/games/cobalt/tidk" \
+    # (and hides the desktop's mouse cursor, as on the car)
+    local hide=()
+    [ "$SCREEN" = native ] && hide=(--hide-cursor)
+    DISPLAY=$QT_DISPLAY python3 tools/game-windows.py --tidk "$CHROOT/tmp/games/cobalt/tidk" "${hide[@]}" \
         </dev/null >"$LOG_DIR/game-windows.log" 2>&1 &
     add_pid $! game-windows
     if [ -n "$GPS" ]; then

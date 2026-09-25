@@ -383,7 +383,7 @@ $("#rawunset").onclick = () => post({ unset: rawPairs().map(p => p.split("=")[0]
 $("#raw").onkeydown = e => { if (e.key === "Enter") $("#rawset").click(); };
 
 // ---- Arcade controls: steering angle, brake pedal and scroll wheels as CAN signals ----
-// SCCM_steeringAngle (degrees, right = positive) -> VAPI_steeringAngle, VCLEFT_brakePressed -> VAPI_brakePedal,
+// SCCM_steeringAngle (degrees, left = positive like the car) -> VAPI_steeringAngle, VCLEFT_brakePressed -> VAPI_brakePedal,
 // VCLEFT_swc{Left,Right}{TiltLeft,Pressed,TiltRight,ScrollTicks} -> STW_*: QtCarVehicle feeds them
 // into its uinput devices game-steering / game-scroll-left / -right while GUI_vehicleGameMode is on.
 const game = { angle: 0, brake: 0, sent: {}, busy: false, next: null };
@@ -404,7 +404,8 @@ function steer(deg) {
   game.angle = deg;
   if (document.activeElement !== $("#steer")) $("#steer").value = deg;
   $("#steerv").textContent = deg + "°";
-  gameSend({ SCCM_steeringAngle: deg, SCCM_steeringAngleValidity: "VALID" });
+  // the panel's angle: right = positive (slider, keys, stick); the car's: left = positive
+  gameSend({ SCCM_steeringAngle: -deg, SCCM_steeringAngleValidity: "VALID" });
 }
 function brake(on) {
   game.brake = on ? 1 : 0;
@@ -461,7 +462,7 @@ function keySteer() {              // ~2 s from the middle to full lock, faster 
   keyTimer = setTimeout(keySteer, 50);
 }
 document.addEventListener("keyup", keySteer);
-// gamepad: left stick = wheel (right = positive, as QtCar and the game read the angle), B / left trigger = brake
+// gamepad: left stick = wheel, B / left trigger = brake
 let padOn = false;
 window.addEventListener("gamepadconnected", e => {
   $("#padstat").textContent = "gamepad: " + e.gamepad.id;

@@ -98,7 +98,7 @@ the uinput devices `game-steering` and `game-scroll-left`/`-right` and feeds the
 
 | Set | QtCar data value | Game device |
 |---|---|---|
-| `SCCM_steeringAngle` (0x129, degrees, **right = positive**) | `VAPI_steeringAngle` | `game-steering` ABS_WHEEL = angle x 100; BBR2: full lock at 30° (`SteeringWheelExtent`), QtCar's top bar says "TOO MUCH RIGHT/LEFT" beyond |
+| `SCCM_steeringAngle` (0x129, degrees, **left = positive**) | `VAPI_steeringAngle` | `game-steering` ABS_WHEEL = angle x 100; BBR2: full lock at 30° (`SteeringWheelExtent`), QtCar's top bar says "TOO MUCH RIGHT/LEFT" beyond |
 | `VCLEFT_brakePressed` (0x3C2) | `VAPI_brakePedal` (source `ETH_VCLEFT_brakePressed`) | `game-steering` brake key |
 | `VCLEFT_swcLeftTiltLeft` / `Pressed` / `TiltRight` (ON/OFF) | `STW_leftTop` / `Middle` / `Bottom` | `game-scroll-left` keys |
 | `VCLEFT_swcLeftScrollTicks` (signed, ticks per frame: they add up while set) | `STW_leftScroll` | `game-scroll-left` wheel |

@@ -74,15 +74,16 @@ classics (Asteroids, Missile Command, Centipede, Lunar Lander, ...). 2048 is par
   (`GUI_steeringWheelControlsMode` TeslAtari), i.e. the panel's scroll wheel buttons.
 - Native screen: the car has no window manager. `tools/game-windows.py` (started by `./tesla
   start`) takes the game windows back from the desktop's: BBR2 at QtCar's place and on top, MAME
-  below QtCar with the keyboard focus.
+  below QtCar with the keyboard focus. It also hides the mouse cursor while the run lasts (QtCar
+  moves it with the steering wheel, for the trackball games).
 - Speed: both render on the GPU with `--native` on Intel (the game users get `/dev/dri` too). In
   software (VNC, other GPUs) BBR2 needs 6+ cores and runs slowly; taps can get lost.
 - Sound: through the media channel (`tplug-media`), like the media player; with `--audio`.
 - Logs: in the image, `/run/qtcar-sv/cobalt.log`, `mame.log`; `/tmp/games/cobalt-input.log`.
   `game-windows.log` in the run folder.
-- Limits: the host's desktop panel (Xfce) shows over QtCar's top bar while MAME has the focus;
-  BBR2 with a steering wheel was tested through the panel's API only; the sound wasn't listened
-  to; VNC mode (Xvfb) is untested with the games.
+- Limits: the MAME games aren't really usable on a desktop (the desktop's panel over QtCar's top
+  bar, windows in odd places); Beach Buggy Racing 2 and 2048 are the ones to play. VNC mode
+  (Xvfb) is untested with the games.
 
 ## Vehicle data and the web panel
 
