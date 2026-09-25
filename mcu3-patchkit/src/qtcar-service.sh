@@ -178,7 +178,24 @@ export LC_ALL=C LANG=C LANGUAGE=C
 # So: HOME = the user's home, with its .Tesla dirs and a link to the shared settings.conf.
 if [ -n "$QCUSER" ] && [ "$QCUSER" != tesla ] && [ -z "$QCSVC_NOUSER" ] && [ "$(id -u)" = 0 ]; then
     UHOME=$(awk -F: -v u="$QCUSER" '$1 == u {print $6}' /etc/passwd)
-    if [ -n "$UHOME" ] && [ -d "$UHOME" ]; then
+    if [ "$UHOME" = / ]; then
+        # qtbt (QtCarBluetooth) has "/" as its home. On the car its minijail mounts /home/tesla
+        # writable and it keeps PhonebookV2.db, BTDevices.db there, where QtCar reads the contacts
+        # (with HOME=/ they went to /.Tesla/data and the phone app stayed at "Loading...").
+        # It's in group tesla: make tesla's data directory and files group-writable (SQLite also
+        # needs the directory for its journal).
+        chgrp tesla "$TESLA_HOME/.Tesla/data" && chmod g+ws "$TESLA_HOME/.Tesla/data"
+        for f in "$TESLA_HOME"/.Tesla/data/*.db "$TESLA_HOME"/.Tesla/data/*.db-journal; do
+            [ -e "$f" ] && chgrp tesla "$f" && chmod g+w "$f"
+        done
+        # contacts stored under /.Tesla by an earlier run: move them over (only if newer)
+        for f in PhonebookV2.db BTDevices.db QtCarBluetoothSettings.db; do
+            [ -f "/.Tesla/data/$f" ] && [ "/.Tesla/data/$f" -nt "$TESLA_HOME/.Tesla/data/$f" ] &&
+                mv -f "/.Tesla/data/$f" "$TESLA_HOME/.Tesla/data/$f" && chgrp tesla "$TESLA_HOME/.Tesla/data/$f" &&
+                chmod g+w "$TESLA_HOME/.Tesla/data/$f"
+        done
+        export HOME=$TESLA_HOME
+    elif [ -n "$UHOME" ] && [ -d "$UHOME" ]; then
         mkdir -p "$UHOME/.Tesla/car" "$UHOME/.Tesla/data"
         [ -e "$UHOME/.Tesla/car/settings.conf" ] || ln -s "$TESLA_HOME/.Tesla/car/settings.conf" "$UHOME/.Tesla/car/settings.conf"
         chown -h "$QCUSER" "$UHOME/.Tesla" "$UHOME/.Tesla/car" "$UHOME/.Tesla/data" "$UHOME/.Tesla/car/settings.conf"
