@@ -29,7 +29,7 @@ With --sim-port PORT (and QtCarSimService started with --udp :PORT, as start_all
 sim's frames come here first and are forwarded, with the signals set here written into them. So
 any signal can be set, also in messages the sim sends (e.g. BMS_packCurrent in 0x132).
 """
-import argparse, http.server, json, math, os, socket, struct, subprocess, sys, threading, time, urllib.parse
+import argparse, collections, gzip, http.server, json, math, os, socket, struct, subprocess, sys, threading, time, urllib.parse
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 DB_PATH = os.path.join(HERE, "work", "can-db.json")
@@ -121,11 +121,13 @@ def decode_signal(frame, s):
 
 
 class Responder:
-    """Listens to QtCarVehicle's outgoing frames (:4321) and answers the UI requests in RESPONSES."""
+    """Listens to QtCarVehicle's outgoing frames (:4321): records them for the panel and, with
+    respond, answers the UI requests in RESPONSES."""
     PORT = 4321
 
-    def __init__(self, snd):
+    def __init__(self, snd, respond=True):
         self.snd = snd
+        self.respond = respond
         self.last = {}
         self.watch = {}          # CAN id -> [(signal name, signal)]
         for name in RESPONSES:
@@ -146,7 +148,8 @@ class Responder:
             if len(data) != 10:
                 continue
             cid = int.from_bytes(data[:2], "big") & 0x7ff
-            for name, s in self.watch.get(cid, ()):
+            self.snd.record(cid, data[2:], "qtcar", time.monotonic())
+            for name, s in self.watch.get(cid, ()) if self.respond else ():
                 v = decode_signal(data[2:], s)
                 prev = self.last.get(name)
                 self.last[name] = v
@@ -270,6 +273,8 @@ class Sender:
         self.by_id = {m["id"]: n for n, m in db.items()}
         self.selectors = {}
         self.sim_ids = {}        # CAN id -> last time it came from the sim (--sim-port)
+        self.seen = {}           # CAN id -> the last frames on the wire (record(), for the panel)
+        self.muxinfo = {}
         self.simsock = None      # --sim-port: QtCarSimService's frames come in here and are forwarded
         if sim_port:
             self.simsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -297,6 +302,7 @@ class Sender:
                 return
             if addr[1] != self.own_port and len(data) >= 2:
                 cid = int.from_bytes(data[:2], "big")
+                self.record(cid, data[2:], "other", now)
                 if cid not in self.foreign or now - self.foreign[cid] > 2:
                     name = next((n for n, m in self.db.items() if m["id"] == cid), "?")
                     if any(self.sigs[v][0] == name for v in self.values):
@@ -331,6 +337,78 @@ class Sender:
                                             for b in s["bits"]})
         return self.selectors[mname]
 
+    def mux(self, mname):
+        """(selector bits, signals common to all branches) of a message; for unmultiplexed ones
+        ([], all signals)."""
+        if mname not in self.muxinfo:
+            sel = self.selector_bits(mname)
+            sigs = self.db[mname]["signals"]
+            zero = "00" * 8
+            branch_bits = {b for s in sigs.values() if s["base"] != zero for b in s["bits"]}
+            # a zero-base signal is branch 0's unless it doesn't overlap any branch's bits
+            common = {n for n, s in sigs.items() if not sel or s["base"] == zero and not set(s["bits"]) & branch_bits}
+            self.muxinfo[mname] = (sel, common)
+        return self.muxinfo[mname]
+
+    @staticmethod
+    def branch(sel, data):
+        """The multiplexer value of a frame (0 if not multiplexed)."""
+        return sum((data[b // 8] >> (b % 8) & 1) << k for k, b in enumerate(sel) if b // 8 < len(data))
+
+    def record(self, cid, data, src, now):
+        """Remember the last frame of each CAN id (per multiplexer branch), who sent it and when."""
+        e = self.seen.get(cid)
+        if e is None:
+            e = self.seen[cid] = {"frames": {}, "times": collections.deque(maxlen=20)}
+        data = bytes(data).ljust(8, b"\0")
+        e.update(src=src, t=now, last=data)
+        e["times"].append(now)
+        mname = self.by_id.get(cid)
+        e["frames"][self.branch(self.mux(mname)[0], data) if mname else 0] = data
+
+    def wire(self, ids, now):
+        """For the panel: every CAN id seen [age s, frames/s, sender], and for the given ids the
+        frames (hex, per branch) and their decoded signals."""
+        wire, msgs = {}, {}
+        for cid, e in self.seen.items():
+            ts = e["times"]
+            dt = ts[-1] - ts[0]
+            wire[cid] = [round(now - e["t"], 1), round((len(ts) - 1) / dt, 1) if dt > 0 else 0, e["src"]]
+        for cid in ids:
+            e, mname = self.seen.get(cid), self.by_id.get(cid)
+            if not e or not mname:
+                continue
+            sel, common = self.mux(mname)
+            values = {}
+            for sname, s in self.db[mname]["signals"].items():
+                f = e["last"] if sname in common else e["frames"].get(self.branch(sel, bytes.fromhex(s["base"])))
+                if f is not None:
+                    values[sname] = decode_signal(f, s)
+            msgs[cid] = {"frames": {k: f.hex() for k, f in sorted(e["frames"].items())}, "values": values}
+        return {"wire": wire, "msgs": msgs}
+
+    def compact_db(self):
+        """The signal database for the panel: messages sorted by id, signals with their range."""
+        out = []
+        for mname, m in sorted(self.db.items(), key=lambda x: x[1]["id"]):
+            sel, common = self.mux(mname)
+            sigs = []
+            for sname, s in m["signals"].items():
+                n = len(s["bits"])
+                lo, hi = (-(1 << (n - 1)), (1 << (n - 1)) - 1) if s.get("signed") else (0, (1 << n) - 1)
+                off = s.get("offset", 0)
+                d = {"n": sname, "len": n, "min": lo * s["scale"] + off, "max": hi * s["scale"] + off, "scale": s["scale"]}
+                if s.get("unit"):
+                    d["u"] = s["unit"]
+                if s.get("enum"):
+                    d["e"] = s["enum"]
+                if sname not in common:
+                    d["m"] = self.branch(sel, bytes.fromhex(s["base"]))
+                sigs.append(d)
+            out.append({"id": m["id"], "n": mname, "period": m["period_ms"], "dlc": m["dlc"],
+                        "sim": m["id"] in SIM_IDS, "mux": bool(sel), "sigs": sigs})
+        return out
+
     def merge(self, now):
         """Forward QtCarSimService's frames (--sim-port) to the target, with the signals set here
         written over the sim's values."""
@@ -360,6 +438,7 @@ class Sender:
                     self.checksum(self.db[mname], None, frame)
                     data = data[:2] + bytes(frame[:len(data) - 2])
             self.sock.sendto(data, self.target)
+            self.record(cid, data[2:], "sim", now)
 
     def frames(self, now):
         """(key, message, bytes) for each message branch with signals set that is due now."""
@@ -392,6 +471,7 @@ class Sender:
         self.merge(now)
         for key, m, frame in self.frames(now):
             self.sock.sendto(struct.pack(">H", m["id"]) + frame, self.target)
+            self.record(m["id"], frame, "set", now)
 
 
 # data values the web page shows (read from QtCarVehicle, port 4030)
@@ -450,6 +530,9 @@ def serve_panel(snd, port, bind="127.0.0.1", log_dir=None):
             data = body if isinstance(body, bytes) else json.dumps(body).encode()
             self.send_response(code)
             self.send_header("Content-Type", ctype)
+            if len(data) > 4096 and "gzip" in self.headers.get("Accept-Encoding", ""):
+                data = gzip.compress(data, 5)
+                self.send_header("Content-Encoding", "gzip")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -467,6 +550,14 @@ def serve_panel(snd, port, bind="127.0.0.1", log_dir=None):
                 self.reply(200, open(os.path.join(HERE, "panel.html"), "rb").read(), "text/html; charset=utf-8")
             elif self.path == "/api/state":
                 self.reply(200, self.state())
+            elif self.path == "/api/db":
+                with snd.lock:
+                    self.reply(200, snd.compact_db())
+            elif self.path.startswith("/api/can"):
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                ids = [int(i, 0) for i in ",".join(q.get("ids", [])).split(",") if i.strip()]
+                with snd.lock:
+                    self.reply(200, snd.wire(ids, time.monotonic()))
             elif self.path.startswith("/logs/"):
                 name, _, query = self.path[len("/logs/"):].partition("?")
                 data = log_text(log_dir, urllib.parse.unquote(name), "all=1" in query)
@@ -591,7 +682,8 @@ def main():
     snd.owner = {}
     if args.http:
         serve_panel(snd, args.http, args.http_bind, args.log_dir)
-    responder = Responder(snd) if args.respond else None
+    # QtCar's outgoing frames: answered with --respond, shown on the panel
+    responder = Responder(snd, args.respond) if args.respond or args.http else None
     try:
         while True:
             with snd.lock:

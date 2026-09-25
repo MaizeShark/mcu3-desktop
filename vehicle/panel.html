@@ -75,6 +75,48 @@ input[type=text] { font: inherit; flex: 1; min-width: 160px; padding: 6px 8px; b
 #logs small { color: var(--muted); }
 #rundir { color: var(--muted); font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 #msg.bad { color: var(--warn); }
+/* CAN signal browser */
+#can h2 small, #canstat { font-weight: 400; text-transform: none; letter-spacing: 0; }
+#canstat { color: var(--muted); font-size: 12px; }
+#canlist details, #canwatch { border-top: 1px solid var(--line); }
+#canlist summary { display: flex; align-items: baseline; gap: 8px; padding: 6px 2px; cursor: pointer; flex-wrap: wrap;
+                   list-style: none; }
+#canlist summary::-webkit-details-marker { display: none; }
+#canlist summary::before { content: "▸"; color: var(--muted); width: 10px; }
+#canlist details[open] > summary::before { content: "▾"; }
+#canlist summary:hover .mname { color: var(--accent); }
+.mid { font-family: ui-monospace, monospace; color: var(--muted); font-size: 12px; min-width: 42px; }
+.mname { font-weight: 600; }
+.minfo { color: var(--muted); font-size: 12px; }
+.wire { font-size: 12px; font-variant-numeric: tabular-nums; margin-left: auto; color: var(--muted); }
+.wire.live { color: var(--on); }
+.tag { font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px;
+       background: var(--chip); color: var(--muted); }
+.frames { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); padding: 0 0 6px 20px;
+          overflow-wrap: anywhere; }
+.sig { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 4px 10px;
+       align-items: center; padding: 3px 2px 3px 20px; border-top: 1px dashed var(--line); }
+.sig .sn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sig .sn small { color: var(--muted); margin-left: 4px; }
+.sig .sv { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sig .sv.none { color: var(--muted); }
+.sig.isset .sn { color: var(--accent); font-weight: 600; }
+.sig .ctl { display: flex; gap: 4px; min-width: 0; }
+.sig .ctl input { flex: 1; min-width: 60px; padding: 3px 6px; }
+.sig .ctl button, .sig .star { padding: 3px 8px; font-size: 12px; }
+.sig .star { border: none; background: none; color: var(--muted); padding: 3px 4px; }
+.sig .star.on { color: var(--warn); }
+.sig .unset { visibility: hidden; }
+.sig.isset .unset { visibility: visible; }
+#canwatch:empty { display: none; }
+#canwatch { padding-bottom: 6px; margin-bottom: 6px; }
+#canwatch .sig { padding-left: 2px; }
+#canwatch .sn small.msg { display: inline; }
+@media (max-width: 700px) {
+  .sig { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; padding-left: 8px; }
+  .sig .star { grid-row: 1; grid-column: 3; }
+  .sig .ctl { grid-column: 1 / -1; }
+}
 </style>
 </head>
 <body>
@@ -174,6 +216,16 @@ input[type=text] { font: inherit; flex: 1; min-width: 160px; padding: 6px 8px; b
     <div id="msg"></div>
   </section>
 
+  <section class="wide" id="can">
+    <h2>CAN signals <small id="canstat">loading the database…</small></h2>
+    <div class="row">
+      <input type="text" id="canq" placeholder="search: signal or message name, 0x118, unit, enum label (several words = all must match)">
+      <span class="seg" id="canf"><button data-f="all" class="on">all</button><button data-f="wire">on the wire</button><button data-f="set">set here</button><button data-f="watch">☆ watched</button></span>
+    </div>
+    <div id="canwatch"></div>
+    <div id="canlist"></div>
+  </section>
+
   <section class="wide" id="run" hidden>
     <h2>Services <span id="rundir"></span></h2>
     <div id="services"></div>
@@ -241,6 +293,7 @@ function render(s) {
   }
   $("#gpsnote").classList.toggle("show", gps);
   renderRun(s.run);
+  canMarks();
   const live = $("#live");
   live.innerHTML = "";
   for (const [k, v] of Object.entries(s.live)) {
@@ -300,6 +353,185 @@ $("#rawset").onclick = () => {
 };
 $("#rawunset").onclick = () => post({ unset: rawPairs().map(p => p.split("=")[0]) });
 $("#raw").onkeydown = e => { if (e.key === "Enter") $("#rawset").click(); };
+
+// ---- CAN signal browser: every message and signal of the database, set here, watched live ----
+let canDb = null, canWire = {}, canFilter = "all", canLimit = 50;
+const sigIndex = {}, msgIndex = {}, canOpen = new Set();
+function load(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } }
+function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+const canWatch = new Set(load("canWatch", []));
+const hex = n => "0x" + n.toString(16).padStart(3, "0");
+const SRC = { set: "this panel", sim: "simulator", other: "another sender", qtcar: "QtCar → car" };
+const num = x => +x.toPrecision(6);
+
+async function canInit() {
+  try {
+    canDb = await (await fetch("api/db")).json();
+  } catch (e) { $("#canstat").textContent = "no database: " + e; return; }
+  for (const m of canDb) {
+    msgIndex[m.id] = m;
+    m.hay = (m.n + " " + hex(m.id)).toLowerCase();
+    for (const s of m.sigs) {
+      sigIndex[s.n] = [m, s];
+      s.hay = (s.n + " " + (s.u || "") + " " + Object.values(s.e || {}).join(" ")).toLowerCase();
+    }
+  }
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h) $("#canq").value = h;      // panel/#DI_gear: a link to a search
+  canRenderWatch();
+  canRender();
+  canPoll();
+}
+
+function canMatches() {
+  const terms = $("#canq").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const out = [];
+  for (const m of canDb) {
+    if (canFilter === "wire" && !canWire[m.id]) continue;
+    let sigs = m.sigs;
+    if (canFilter === "set") sigs = sigs.filter(s => s.n in values);
+    if (canFilter === "watch") sigs = sigs.filter(s => canWatch.has(s.n));
+    if (terms.length) {
+      if (!terms.every(t => m.hay.includes(t))) sigs = sigs.filter(s => terms.every(t => m.hay.includes(t) || s.hay.includes(t)));
+    }
+    if (sigs.length) out.push([m, sigs]);
+  }
+  return out;
+}
+
+function sigRow(m, s, withMsg) {
+  const row = el("div", { className: "sig" });
+  row.dataset.sig = s.n;
+  const name = el("span", { className: "sn", title: s.n + (s.m !== undefined ? " (multiplexer branch " + s.m + ")" : "") +
+                                                  "\n" + s.len + " bit, scale " + s.scale }, s.n);
+  if (s.m !== undefined) name.append(el("small", {}, "m" + s.m));
+  if (withMsg) name.append(el("small", { className: "msg" }, hex(m.id) + " " + m.n));
+  const range = s.min === 0 && s.max === 1 && !s.e ? "0/1" : num(s.min) + " … " + num(s.max) + (s.u ? " " + s.u : "");
+  const input = el("input", { type: "text", placeholder: range, title: "value in " + (s.u || "the signal's unit") +
+                              (s.e ? " or a label: " + Object.values(s.e).join(", ") : "") });
+  if (s.e) {
+    const id = "dl-" + s.n;
+    if (!document.getElementById(id))
+      document.body.append(el("datalist", { id }, ...Object.entries(s.e).map(([k, v]) => el("option", { value: v, label: k }))));
+    input.setAttribute("list", id);
+  }
+  const go = () => input.value.trim() && set({ [s.n]: input.value.trim() });
+  input.onkeydown = e => { if (e.key === "Enter") go(); };
+  const star = el("button", { className: "star", title: "watch (shown on top of this section)" }, "☆");
+  star.onclick = () => {
+    canWatch.has(s.n) ? canWatch.delete(s.n) : canWatch.add(s.n);
+    save("canWatch", [...canWatch]);
+    canRenderWatch();
+    canMarks();
+  };
+  const ctl = el("span", { className: "ctl" }, input, el("button", { onclick: go }, "set"),
+                 el("button", { className: "unset", title: "stop sending it", onclick: () => post({ unset: [s.n] }) }, "unset"));
+  row.append(name, el("span", { className: "sv none" }, "–"), ctl, star);
+  return row;
+}
+
+function wireText(m) {
+  const w = canWire[m.id];
+  if (!w) return ["not on the wire", false];
+  const [age, rate, src] = w;
+  return [(age > 3 ? "last seen " + Math.round(age) + " s ago" : rate ? rate + "/s" : "seen") + " · " + SRC[src], age <= 3];
+}
+
+function canRender() {
+  if (!canDb) return;
+  const list = $("#canlist");
+  list.innerHTML = "";
+  const hits = canMatches(), nsig = hits.reduce((a, [, s]) => a + s.length, 0);
+  const q = $("#canq").value.trim();
+  const openAll = (q || canFilter === "set" || canFilter === "watch") && nsig <= 40;
+  for (const [m, sigs] of hits.slice(0, canLimit)) {
+    const d = el("details");
+    d.dataset.id = m.id;
+    const wt = wireText(m);
+    const sum = el("summary", {}, el("span", { className: "mid" }, hex(m.id)), el("span", { className: "mname" }, m.n),
+                   el("span", { className: "minfo" }, (sigs.length < m.sigs.length ? sigs.length + " of " : "") + m.sigs.length +
+                      " signals · " + (m.period ? m.period + " ms" : "no period") + " · " + m.dlc + " bytes"));
+    if (m.sim) sum.append(el("span", { className: "tag", title: "QtCarSimService sends this message" }, "SIM"));
+    if (m.mux) sum.append(el("span", { className: "tag", title: "multiplexed: the m-number is the branch" }, "MUX"));
+    sum.append(el("span", { className: "wire" + (wt[1] ? " live" : "") }, wt[0]));
+    d.append(sum);
+    d.ontoggle = () => {
+      if (d.open && d.children.length === 1) {
+        d.append(el("div", { className: "frames" }));
+        for (const s of sigs) d.append(sigRow(m, s));
+        canMarks();
+      }
+      d.open ? canOpen.add(m.id) : canOpen.delete(m.id);
+      if (d.open) { clearTimeout(canTimer); canTimer = setTimeout(canPoll, 50); }
+    };
+    list.append(d);
+    if (openAll || canOpen.has(m.id)) d.open = true;
+  }
+  if (hits.length > canLimit)
+    list.append(el("div", { className: "row" }, el("button", { onclick: () => { canLimit += 100; canRender(); } },
+                   "show more (" + (hits.length - canLimit) + " messages)")));
+  const onWire = Object.keys(canWire).length;
+  $("#canstat").textContent = canDb.length + " messages · " + Object.keys(sigIndex).length + " signals · " + onWire +
+    " ids on the wire" + (q || canFilter !== "all" ? " · " + hits.length + " messages / " + nsig + " signals match" : "");
+}
+
+function canRenderWatch() {
+  const w = $("#canwatch");
+  w.innerHTML = "";
+  for (const n of [...canWatch].sort()) if (sigIndex[n]) w.append(sigRow(...sigIndex[n], true));
+}
+
+// live values, set markers and stars on the rows that exist
+function canMarks(msgs) {
+  for (const row of $$("#can .sig")) {
+    const n = row.dataset.sig, [m, s] = sigIndex[n];
+    row.classList.toggle("isset", n in values);
+    const star = $(".star", row);
+    star.classList.toggle("on", canWatch.has(n));
+    star.textContent = canWatch.has(n) ? "★" : "☆";
+    if (msgs) {
+      const v = msgs[m.id] && msgs[m.id].values[n], sv = $(".sv", row);
+      sv.textContent = v === undefined ? "–" : v + (s.u && !isNaN(v) ? " " + s.u : "");
+      sv.className = "sv" + (v === undefined ? " none" : "");
+      sv.title = n in values ? "set here: " + values[n] : "";
+    }
+  }
+  if (msgs) for (const f of $$("#canlist details[open] .frames")) {
+    const e = msgs[f.parentNode.dataset.id];
+    f.textContent = e ? Object.entries(e.frames).map(([k, h]) => (Object.keys(e.frames).length > 1 ? "m" + k + " " : "") +
+      h.match(/../g).join(" ")).join("  ·  ") : "";
+  }
+}
+
+let canTimer = null;
+async function canPoll() {
+  clearTimeout(canTimer);
+  const ids = new Set([...canOpen]);
+  for (const n of canWatch) if (sigIndex[n]) ids.add(sigIndex[n][0].id);
+  try {
+    const r = await (await fetch("api/can?ids=" + [...ids].join(","))).json();
+    const before = Object.keys(canWire).length;
+    canWire = r.wire;
+    $("#canstat").textContent = $("#canstat").textContent.replace(/\d+ ids on the wire/, Object.keys(canWire).length + " ids on the wire");
+    if (canFilter === "wire" && Object.keys(canWire).length !== before) canRender();
+    for (const d of $$("#canlist details")) {
+      const [t, live] = wireText(msgIndex[d.dataset.id]), w = $(".wire", d);
+      w.textContent = t; w.classList.toggle("live", live);
+    }
+    canMarks(r.msgs);
+  } catch (e) {}
+  canTimer = setTimeout(canPoll, 1000);
+}
+
+let canDeb = null;
+$("#canq").oninput = () => { clearTimeout(canDeb); canDeb = setTimeout(() => { canLimit = 50; canRender(); }, 200); };
+for (const b of $$("#canf button")) b.onclick = () => {
+  canFilter = b.dataset.f;
+  for (const x of $$("#canf button")) x.classList.toggle("on", x === b);
+  canLimit = 50;
+  canRender();
+};
+canInit();
 
 async function poll() {
   try {

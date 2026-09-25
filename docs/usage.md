@@ -129,6 +129,14 @@ With `--vehicle`: **http://localhost:8099/**
 - **Controls:** drive rail, gear, speed, battery; doors, frunk, trunk, lock; charging state,
   current, time to full; lights; turn signals, hazards, parking brake, seat belt; outside and
   inside temperature; tire pressures; any CAN signal by name.
+- **CAN signals:** all 379 messages and 8759 signals of the firmware's CAN database. Search by
+  signal or message name, id (`0x118`), unit or enum label (several words: all must match);
+  filters "on the wire" (ids seen since tesla-can.py started, with rate and sender:
+  this panel, the simulator, another sender, or QtCar's own requests to the car), "set here"
+  and "watched". Open a message to see its frames (per multiplexer branch) and every signal's
+  decoded live value; set a value (number in the signal's unit or an enum label) or unset it;
+  ☆ pins a signal to the top of the section (remembered in the browser).
+  `http://localhost:8099/#DI_gear` opens the panel with that search.
 - **GPS marks:** with `--gps`, gear, speed, drive rail and odometer follow the GPS and carry a
   GPS badge. A change there holds until the GPS car starts or stops moving.
 - **Services:** every service and helper of the run with an up/down dot and its restart count,

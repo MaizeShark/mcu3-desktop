@@ -142,6 +142,12 @@ Presets: `parked` (the base: drive inverter, iBooster, chassis control), `drive`
 `unlocked`, `lights-on`, `lights-off`, `tires-ok`, `tire-low`, `winter`, `summer`.
 `--http PORT` serves the web page (`vehicle/panel.html`, JSON API at `/api/state`: GET for the
 state, POST `{"values": {...}}`, `{"preset": NAME}` or `{"unset": [...]}`).
+The page's "CAN signals" section browses the whole database: `/api/db` (every message with its
+signals, range, unit, enum, multiplexer branch `m`), `/api/can?ids=0x118,0x3b6` (every CAN id
+seen: `[age s, frames/s, sender]`, sender `set` = this tool, `sim` = forwarded from the
+simulator, `other` = another sender on the port, `qtcar` = QtCar's requests on :4321; plus for
+the given ids the last frame per multiplexer branch and all decoded signals). With `--http` it
+listens on :4321 even without `--respond` (only to show QtCar's frames).
 
 Values are in the signal's unit or an enum label (`--find` lists both). A `*` after the message
 name in `--find` means the simulator sends that message itself.
