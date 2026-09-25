@@ -63,7 +63,7 @@ flowchart LR
   v4l -- "backup camera" --> qtcar
 ```
 
-- **The image** (`mcu3-new.ext4`) is a copy of the firmware's root filesystem with the patch
+- **The image** (`mcu2.ext4`) is a copy of the firmware's root filesystem with the patch
   kit applied. It's loop-mounted at `chroot/`; `/proc`, a few `/dev` nodes, a private tmpfs
   `/dev/shm`, a `net_cls` cgroup and the optional devices/folders are mounted into it.
 - **QtCar** runs in the chroot as on the car (`/startup.sh` from the kit sets its environment
@@ -78,7 +78,7 @@ flowchart LR
 
 ## The patch kit
 
-`mcu3-patchkit/mcu3_patch.py` turns the pristine dump into the working image and can be applied
+`mcu2-patchkit/mcu2_patch.py` turns the pristine dump into the working image and can be applied
 again at any time (it only does what's missing). Groups:
 
 | Group | What |
@@ -94,8 +94,8 @@ again at any time (it only does what's missing). Groups:
 
 Every binary patch checks the original bytes and the file's SHA-1 first; an unknown firmware
 version is refused. Patches of earlier kits that turned out unnecessary are "retired": the kit
-restores the firmware's bytes where it finds them, so an existing image ends up like a fresh one. `mcu3_patch.py --list` lists everything. Details and the history of each
-patch: [`mcu3-patchkit/README.md`](../mcu3-patchkit/README.md).
+restores the firmware's bytes where it finds them, so an existing image ends up like a fresh one. `mcu2_patch.py --list` lists everything. Details and the history of each
+patch: [`mcu2-patchkit/README.md`](../mcu2-patchkit/README.md).
 
 ## Ports
 

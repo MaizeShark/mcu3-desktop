@@ -1,4 +1,4 @@
-Tesla Model 3 MCU3 project in ~/TeslaMCU (public: github.com/MaizeShark/mcu3-desktop). Read
+Tesla Model 3 MCU2 (Intel Atom) project in ~/TeslaMCU (public: github.com/MaizeShark/mcu2-desktop). Read
 CLAUDE.md, README.md, docs/, then notes/session6-2026-09-24.md (the ./tesla command, native
 screen on a touch laptop, GPU, camera, Bluetooth, audio clock) and notes/session7-2026-09-25.md
 (the latest: every CAN signal on the panel, the arcade).
@@ -15,7 +15,7 @@ Current state:
   to 4:3, the PulseAudio/PipeWire udev rule (tools/99-tesla-sound.rules).
 - Test laptop: ThinkPad T480 (touchscreen, Intel AX210) with a Debian 13 live system in RAM,
   `ssh user@<laptop>` (address in the user's own notes) (passwordless sudo; everything there is gone after its reboot; don't
-  reboot it). Its copy: ~/mcu3-desktop (repo files via rsync of `git ls-files`, the image copied
+  reboot it). Its copy: ~/mcu3-desktop (old name) (repo files via rsync of `git ls-files`, the image copied
   with zstd). A rooted Pixel 7a ("Pixel 7a 2") is on this PC's adb, paired with the laptop's "Tesla".
 
 Done in session 7: the panel's "CAN signals" section (browse/search/set/watch all 8759

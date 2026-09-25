@@ -1,12 +1,13 @@
-# mcu3-stuff
+# mcu2-desktop
 
-Runs the Tesla Model 3 touchscreen UI (QtCar) of the **MCU3** on a Linux PC: the firmware runs
+Runs the Tesla Model 3 touchscreen UI (QtCar) of the **MCU2** on a Linux PC: the firmware runs
 in a chroot, the screen is a virtual display you see and touch over VNC. Around it: fake vehicle
 data with a web panel, GPS (fixed, driving a route, or a real receiver), sound, a folder as USB
 music stick, a backup camera from any V4L2 source, and offline navigation.
 
-> **MCU3?** The media control unit this firmware runs on is often called **MCU-Z**.
-> This project calls it MCU3: it follows the MCU2, so 3 makes more sense.
+> **MCU2?** The Model 3's first media control unit (from its launch until about 2021): the
+> Intel Atom based one, which Tesla calls "ICE". It's not the vertical-screen MCU2 of the Model S/X,
+> and not the later AMD Ryzen MCU3. (Until 2026-09 this project called it MCU3 by mistake.)
 
 ## Please read first
 
@@ -31,7 +32,7 @@ music stick, a backup camera from any V4L2 source, and offline navigation.
 sudo apt install xvfb x11vnc x11-utils curl python3 e2fsprogs cargo krdc
 (cd tesla-touch && cargo build --release)
 sudo cp tesla-touch/99-tesla-touch.rules /etc/udev/rules.d/ && sudo udevadm control --reload
-./tesla build-image --fresh           # your firmware dump in mcu3-original/ -> mcu3-new.ext4
+./tesla build-image --fresh           # your firmware dump in mcu2-original/ -> mcu2.ext4
 ./tesla check                         # what's missing, with hints
 
 # run

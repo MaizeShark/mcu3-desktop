@@ -4,21 +4,21 @@ build_usage() {
     cat <<EOF
 ${B}./tesla build-image$R0 [options] [-- patch kit options]
 
-Brings the image ($IMAGE) up to date: applies the patch kit (mcu3-patchkit/mcu3_patch.py,
+Brings the image ($IMAGE) up to date: applies the patch kit (mcu2-patchkit/mcu2_patch.py,
 only what's missing) and installs the offline maps built by navigation/build-tiles.sh.
 
   (no options)     update the image: kit + maps (needs sudo; not while ./tesla start runs)
   --check          only show what an update would change
-  --fresh          build a new image from the firmware dump in mcu3-original/ (copy, kit,
+  --fresh          build a new image from the firmware dump in mcu2-original/ (copy, kit,
                    maps). The old image is kept as $(basename "$IMAGE").old. Settings QtCar
                    stored in the old image (car config, favorites, ...) start over.
   --size SIZE      size of a --fresh image (default 6G)
   --maps REGION    install these maps (navigation/work/tiles-REGION), e.g. US or EU
   --no-maps        leave the maps alone
   --sandbox        update sandbox/rootfs instead (no sudo; for ./sandbox.sh)
-  -- ...           options for mcu3_patch.py, e.g. -- --skip cef --vin 5YJ3...
+  -- ...           options for mcu2_patch.py, e.g. -- --skip cef --vin 5YJ3...
 
-What the kit does: mcu3-patchkit/README.md; mcu3_patch.py --list lists every patch.
+What the kit does: mcu2-patchkit/README.md; mcu2_patch.py --list lists every patch.
 EOF
 }
 
@@ -101,7 +101,9 @@ with_image() {
 }
 
 build_fresh() {
-    local orig=$TESLA_DIR/mcu3-original new=$IMAGE.new mnt
+    local orig=$TESLA_DIR/mcu2-original new=$IMAGE.new mnt
+    # the dump's folder was called mcu3-original until 2026-09-25
+    [ ! -d "$orig" ] && [ -d "$TESLA_DIR/mcu3-original" ] && orig=$TESLA_DIR/mcu3-original
     [ -f "$orig/usr/tesla/UI/bin/QtCar" ] || die "no firmware dump in $orig (usr/tesla/UI/bin/QtCar missing)"
     image_mounted >/dev/null && die "$CHROOT has an image mounted; unmount it first: sudo umount $CHROOT"
     if [ -e "$IMAGE" ]; then
@@ -112,11 +114,11 @@ build_fresh() {
     fi
     step "New image ($SIZE_NEW)"
     command rm -f "$new"
-    truncate -s "$SIZE_NEW" "$new" && mkfs.ext4 -q -F -L mcu3 "$new" || die "mkfs failed"
+    truncate -s "$SIZE_NEW" "$new" && mkfs.ext4 -q -F -L mcu2 "$new" || die "mkfs failed"
     mnt=$(mktemp -d)
     sudo mount -o loop "$new" "$mnt" || die "couldn't mount $new"
     trap 'sudo umount "$mnt" 2>/dev/null; rmdir "$mnt"' EXIT
-    step "Copying the firmware from mcu3-original/"
+    step "Copying the firmware from ${orig##*/}/"
     sudo cp -a "$orig/." "$mnt/" || die "copy failed"
     ( update_root "$mnt" sudo ) || die "build failed; the old image is untouched ($new is incomplete)"
     sudo umount "$mnt" && rmdir "$mnt"

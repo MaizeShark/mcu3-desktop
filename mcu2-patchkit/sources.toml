@@ -1,7 +1,7 @@
 # Download sources for the files in payload/.
 # All from Ubuntu 16.04 (xenial), found 2026-09-23; each extracted file verified against its hash.
 #
-# mcu3_patch.py uses payload/<path> if it's there. If not, it downloads it from the url below.
+# mcu2_patch.py uses payload/<path> if it's there. If not, it downloads it from the url below.
 # Fill in per file:
 #   url     direct link to the file, or to a package/archive containing it
 #           (.deb, .tar.gz, .tar.xz, .tar.bz2, .tar.zst, .zip)
@@ -12,7 +12,7 @@
 #           symlinks inside the package are followed)
 #
 # Several entries may use the same url; each package is downloaded once (cached in downloads/).
-# Whatever gets extracted is always checked against the exact hash in mcu3_patch.py, so a
+# Whatever gets extracted is always checked against the exact hash in mcu2_patch.py, so a
 # wrong package version is caught.
 #
 # icu_preload.so and the fake chrome-sandbox need no entry: they are compiled from src/.

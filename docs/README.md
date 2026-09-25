@@ -9,7 +9,7 @@
 | [troubleshooting.md](troubleshooting.md) | checks, log summaries, known symptoms and their fixes, problem reports |
 | [development.md](development.md) | working on this repo: the sudo-free sandbox, the patch kit, testing, conventions |
 
-Deeper technical details are in the component READMEs: [`mcu3-patchkit/`](../mcu3-patchkit/README.md),
+Deeper technical details are in the component READMEs: [`mcu2-patchkit/`](../mcu2-patchkit/README.md),
 [`tesla-touch/`](../tesla-touch/README.md), [`navigation/`](../navigation/README.md),
 [`vehicle/`](../vehicle/README.md). The session notes in [`notes/`](../notes/README.md) tell how
 everything was found out.

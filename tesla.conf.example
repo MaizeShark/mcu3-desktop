@@ -86,5 +86,5 @@
 # --- Image -------------------------------------------------------------------------------------
 
 # The patched firmware image and where it's mounted (see ./tesla build-image)
-#IMAGE=./mcu3-new.ext4
+#IMAGE=./mcu2.ext4
 #CHROOT=./chroot

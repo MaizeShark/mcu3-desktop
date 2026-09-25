@@ -11,16 +11,16 @@
 !/tesla.conf.example
 !/tools/
 !/sandbox.sh
-!/mcu3-patchkit/
+!/mcu2-patchkit/
 !/tesla-touch/
 !/notes/
 !/navigation/
 !/vehicle/
 !/bluetooth/
 
-/mcu3-patchkit/downloads/
-# downloaded / built by mcu3_patch.py (sources.toml, src/); never commit the libraries
-/mcu3-patchkit/payload/
+/mcu2-patchkit/downloads/
+# downloaded / built by mcu2_patch.py (sources.toml, src/); never commit the libraries
+/mcu2-patchkit/payload/
 __pycache__/
 /tesla-touch/target/
 /navigation/work/

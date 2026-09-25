@@ -109,7 +109,7 @@ check_image() {
     elif [ -f "$IMAGE" ]; then
         chk ok "image $IMAGE ($(( $(stat -c %s "$IMAGE") / 1024 / 1024 / 1024 )) GB, mounted at start)"
     else
-        chk fail "no image at $IMAGE" "build one: ./tesla build-image --fresh (needs the firmware dump in mcu3-original/)"
+        chk fail "no image at $IMAGE" "build one: ./tesla build-image --fresh (needs the firmware dump in mcu2-original/)"
         return
     fi
     stamp=$(kit_stamp)

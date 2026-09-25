@@ -1,5 +1,5 @@
 #!/bin/sh
-# /sbin/sv in the chroot (mcu3-patchkit). On the car runit supervises the services and the
+# /sbin/sv in the chroot (mcu2-patchkit). On the car runit supervises the services and the
 # escalator starts some of them with "sv start <name>" (fireplace, dog mode, HAL 9000 videos).
 # There is no runsvdir in the chroot, so for those services this runs qtcar-service <name>
 # in the background instead; everything else goes to runit's sv (/sbin/sv.runit).

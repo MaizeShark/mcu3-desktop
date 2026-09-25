@@ -14,12 +14,17 @@ all work in the real chroot. Session 6 replaced `start_all.sh` by the `./tesla` 
 signal on the web panel, and the arcade (Beach Buggy Racing 2, MAME) playable, tested with
 `--native` on the laptop. Details: `notes/session6-*.md`, `notes/session7-*.md`.
 
+Naming: the unit is the Model 3's **MCU2** (Intel Atom, Tesla's "ICE"), not the MCU3 (AMD).
+Until 2026-09-25 the project called it MCU3 (repo mcu3-desktop, `mcu3-*` folders); the session
+notes up to 7 still do. Old names keep working: image `mcu3-new.ext4`, dump `mcu3-original/`,
+kit stamp `/etc/mcu3-patchkit`, the kit's old asound.conf marker.
+
 ## Layout
-- `mcu3-original/`: pristine firmware dump, root-owned. Never modify it and never commit it.
-- `mcu3-new.ext4`, mounted at `chroot/`: the image `./tesla start`
+- `mcu2-original/`: pristine firmware dump, root-owned. Never modify it and never commit it.
+- `mcu2.ext4`, mounted at `chroot/`: the image `./tesla start`
   runs (`IMAGE`/`CHROOT` in tesla.conf). `./tesla` refuses to mount it a second time elsewhere.
-- `mcu3-patchkit/mcu3_patch.py`: turns a rootfs into the working state. Idempotent, `--check`, `--list`,
-  `-q`. Writes a version stamp (`/etc/mcu3-patchkit`) that `./tesla check` compares.
+- `mcu2-patchkit/mcu2_patch.py`: turns a rootfs into the working state. Idempotent, `--check`, `--list`,
+  `-q`. Writes a version stamp (`/etc/mcu2-patchkit`) that `./tesla check` compares.
   `./tesla build-image` (kit + maps) wraps it; `--sandbox` updates `sandbox/rootfs` without sudo.
   - `src/qtcar-service.sh` starts the firmware's `qtcar-*` services and `valhalla` inside the chroot.
 - `tesla-touch/`: Rust mouse→multitouch bridge (`cargo build --release`).
@@ -43,9 +48,9 @@ signal on the web panel, and the arcade (Beach Buggy Racing 2, MAME) playable, t
 - `.gitignore` is a **whitelist** (`/*` then `!/...`). A new top-level file or folder has to be
   added there to be tracked. Firmware, images, `logs/`, `sandbox/` and `navigation/work/` stay out.
 - Remotes: `origin` is the maintainer's own git server (frequent pushes are fine), `github` is
-  the public repository https://github.com/MaizeShark/mcu3-desktop (push only when asked: major
+  the public repository https://github.com/MaizeShark/mcu2-desktop (push only when asked: major
   updates). Both share one history.
-- Public repository: never commit firmware files, binaries (`mcu3-patchkit/payload/` is
+- Public repository: never commit firmware files, binaries (`mcu2-patchkit/payload/` is
   downloaded/built by the kit), keys or credentials found in the firmware, or private details
   (addresses, local network). Check before a push to `github`.
 - End commit messages with the Co-Authored-By line.
@@ -81,7 +86,7 @@ podman run --rm --timeout 20 --network host -e QCSVC_NOUSER=1 --rootfs $PWD/sand
   reference (the annotated-objdump approach in notes/session4) and by their callers.
 - The firmware has `strace` (use it inside the container). Host tools such as
   `valhalla_run_route` also run directly:
-  `mcu3-original/lib64/ld-linux-x86-64.so.2 --library-path usr/proto2/lib:usr/lib:lib <bin>`.
+  `mcu2-original/lib64/ld-linux-x86-64.so.2 --library-path usr/proto2/lib:usr/lib:lib <bin>`.
 - For disassembly, `objdump -d -C` on the libraries in `usr/tesla/UI/lib` works well
   (`libQtCarGUI`, `libQtCarUIFramework`).
 - After changing files in `sandbox/rootfs`, podman sometimes sees the old state for a moment.

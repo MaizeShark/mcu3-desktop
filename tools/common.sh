@@ -4,7 +4,7 @@ TESLA_DIR=$PWD
 LOGS=$TESLA_DIR/logs
 DISPLAY_NUM=:1
 TOUCH_BIN=$TESLA_DIR/tesla-touch/target/release/tesla-touch
-KIT=$TESLA_DIR/mcu3-patchkit/mcu3_patch.py
+KIT=$TESLA_DIR/mcu2-patchkit/mcu2_patch.py
 # ports the firmware services listen on (TCP data value servers, UDP CAN/GPS/control)
 SERVICE_TCP_PORTS="4220 4160 4030 4190 4060 8002"
 SERVICE_UDP_PORTS="1234 1235 4321 20100 63277"
@@ -33,7 +33,7 @@ set_defaults() {
     AUDIO=0 AUDIO_REMIX="1v0.5,4v0.5,5v0.5,7v0.5 1v0.5,2v0.5,6v0.5,8v0.5"
     MUSIC="" CAMERA="" CAMERA_DEV=/dev/video32 CAMERA_SIZE=1280x960 NAV=1 SERVICES=""
     SIZE=1920x1200 VIEWER="" REMOTE=0 VNC_PORT=5900 PANEL_PORT=8099 RESTART=1
-    IMAGE=./mcu3-new.ext4 CHROOT=./chroot
+    IMAGE=./mcu2.ext4 CHROOT=./chroot
     SCREEN=vnc NATIVE_DISPLAY=:0 TOUCH_DEVICE=auto QTCAR_ARGS="" GPU=auto BLUETOOTH=0 BT_ADAPTER=hci0
 }
 
@@ -79,6 +79,10 @@ load_config() {
     for v in IMAGE CHROOT; do
         case "${CONF_SRC[$v]}" in environment) ;; *) printf -v "$v" '%s' "$(abspath "${!v}" "$TESLA_DIR")" ;; esac
     done
+    # until 2026-09-25 the default image was mcu3-new.ext4 (the unit was called MCU3 by mistake)
+    if [ "${CONF_SRC[IMAGE]}" = default ] && [ ! -e "$IMAGE" ] && [ -e "$TESLA_DIR/mcu3-new.ext4" ]; then
+        IMAGE=$TESLA_DIR/mcu3-new.ext4
+    fi
     for v in $PATH_VARS; do
         [ "${CONF_SRC[$v]}" = environment ] && printf -v "$v" '%s' "$(abspath "${!v}" "$CALLER_PWD")"
     done
@@ -249,11 +253,13 @@ image_file() {
     if image_mounted >/dev/null; then
         cat "$CHROOT/$1" 2>/dev/null
     elif [ -r "$IMAGE" ]; then
-        PATH=$PATH:/sbin debugfs -R "cat /$1" "$IMAGE" 2>/dev/null
+        # debugfs prints nothing (and still exits 0) for a missing file
+        PATH=$PATH:/sbin debugfs -R "cat /$1" "$IMAGE" 2>/dev/null | grep . || return 1
     fi
 }
 
-kit_stamp() { image_file etc/mcu3-patchkit; }
+# the kit's version stamp in the image (etc/mcu3-patchkit from kits before the rename)
+kit_stamp() { image_file etc/mcu2-patchkit || image_file etc/mcu3-patchkit; }
 
 # native_output: "OUTPUT<TAB>WxH" of the first connected output of $NATIVE_DISPLAY with a mode.
 # The size is the panel's own mode, not a scaled framebuffer.

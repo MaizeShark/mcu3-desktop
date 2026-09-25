@@ -2,7 +2,8 @@
 
 How everything here was found out, session by session. The user guide is `../README.md`; the
 component READMEs have the current details. These notes are history: later sessions supersede
-earlier ones where they disagree.
+earlier ones where they disagree. Up to session 7 they call the unit "MCU3" and the folders
+`mcu3-*`: it's the Model 3's Intel Atom **MCU2**; renamed on 2026-09-25 (`mcu2-*`).
 
 | Note | What |
 |---|---|

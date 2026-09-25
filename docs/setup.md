@@ -10,7 +10,7 @@ Everything here is needed once. Afterwards `./tesla check` shows whether all is 
   per region while building).
 - **sudo**: the chroot, mounts and kernel modules need root. `./tesla` asks for the password
   once per start.
-- **Your own dump of the MCU3 firmware 2019.20.4.2** (x86_64). This repository contains no
+- **Your own dump of the Model 3 MCU2 (Intel Atom) firmware 2019.20.4.2** (x86_64). This repository contains no
   firmware and no files from it, and nothing here downloads it. Only this version was ever tested:
   the patch kit checks every file it patches and refuses unknown versions.
 
@@ -43,23 +43,25 @@ sudo cp tesla-touch/99-tesla-touch.rules /etc/udev/rules.d/ && sudo udevadm cont
 ## 3. The image
 
 Put your firmware dump (the root filesystem, `usr/tesla/UI/bin/QtCar` inside) at
-`mcu3-original/` in the repository folder, owned by root as extracted. Never modify it; the
-image is a patched copy.
+`mcu2-original/` in the repository folder, owned by root as extracted. Never modify it; the
+image is a patched copy. (Before 2026-09-25 these were `mcu3-original/` and `mcu3-new.ext4`;
+both are still found. To switch to the new names: `./tesla stop`, then
+`mv mcu3-original mcu2-original` and, with the image unmounted, `mv mcu3-new.ext4 mcu2.ext4`.)
 
 ```sh
 ./tesla build-image --fresh
 ```
 
-This creates `mcu3-new.ext4` (6 GB, `--size`): it copies the dump, applies the patch kit
-([`mcu3-patchkit/`](../mcu3-patchkit/README.md): binary patches, a software OpenGL renderer,
+This creates `mcu2.ext4` (6 GB, `--size`): it copies the dump, applies the patch kit
+([`mcu2-patchkit/`](../mcu2-patchkit/README.md): binary patches, a software OpenGL renderer,
 config, service scripts) and installs maps if some are built. The kit downloads nothing from Tesla.
 The open-source libraries it adds (Mesa, LLVM, ...) are downloaded once from the Ubuntu 16.04
-archive (`mcu3-patchkit/sources.toml`, checked by hash) and cached in `mcu3-patchkit/payload/`;
-its shims are compiled from `mcu3-patchkit/src/` (needs gcc and internet access the first time).
+archive (`mcu2-patchkit/sources.toml`, checked by hash) and cached in `mcu2-patchkit/payload/`;
+its shims are compiled from `mcu2-patchkit/src/` (needs gcc and internet access the first time).
 
 After a `git pull`, bring the image up to date with `./tesla build-image` (only what changed is
 applied; `--check` shows what would change). The image remembers which kit version patched it
-(`/etc/mcu3-patchkit`), and `./tesla check` warns when it's outdated.
+(`/etc/mcu2-patchkit`), and `./tesla check` warns when it's outdated.
 
 The image is mounted at `chroot/` while it runs (`IMAGE` and `CHROOT` in `tesla.conf`).
 

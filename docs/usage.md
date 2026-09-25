@@ -76,7 +76,7 @@ defaults < `tesla.conf` < environment variables of the same name < command line 
 | `--remote` | `REMOTE=0` | VNC (with a password) and the panel reachable from the network |
 | | `VNC_PORT=5900`, `PANEL_PORT=8099` | ports |
 | `--no-restart` | `RESTART=1` | don't restart QtCar when it exits |
-| | `IMAGE=./mcu3-new.ext4`, `CHROOT=./chroot` | the image and its mount point |
+| | `IMAGE=./mcu2.ext4`, `CHROOT=./chroot` | the image and its mount point |
 | `--verbose`, `-v` | | QtCar's output in the terminal too |
 | `--strace "SVC ..."` | | run services under strace; traces end up in the run's log folder |
 | `--dry-run`, `-n` | | only check and show what would start |

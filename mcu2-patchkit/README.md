@@ -1,8 +1,8 @@
-# mcu3-patchkit
+# mcu2-patchkit
 
 Rebuilds the working Tesla Model 3 MCU chroot (firmware 2019.20.4.2) from the pristine
-dump in `../mcu3-original`: 5 byte patches in 4 binaries, preload shims, open-source libraries,
-config. `mcu3_patch.py --list` shows everything.
+dump in `../mcu2-original`: 5 byte patches in 4 binaries, preload shims, open-source libraries,
+config. `mcu2_patch.py --list` shows everything.
 
 ## The binary patches
 
@@ -33,7 +33,7 @@ service; one 2-byte patch is simpler.
 
 | Path | What |
 |---|---|
-| `mcu3_patch.py` | Applies everything. Idempotent, checks every patch's original bytes and SHA-1 first |
+| `mcu2_patch.py` | Applies everything. Idempotent, checks every patch's original bytes and SHA-1 first |
 | `sources.toml` | Where each library comes from: Ubuntu 16.04 package URL, sha256, path inside the package |
 | `src/icu_preload.c` | Source of `icu_preload.so` (verified: compiles to the same code) |
 | `src/egl_pixmap_shim.c` | Preloaded into QtCar: shows the browser's picture (EGL images from X pixmaps without DRI) and keeps the browser's window away from a desktop's window manager |
@@ -42,13 +42,13 @@ service; one 2-byte patch is simpler.
 ### Where payload files come from
 
 The repository contains no binaries: the libraries are downloaded, the shims are built. For each
-file, `mcu3_patch.py` tries in order:
+file, `mcu2_patch.py` tries in order:
 
 1. `payload/<path>` (the local cache), if its hash matches;
 2. the `url` in `sources.toml`: a package (`.deb`, `.tar.*`, `.zip`) from the Ubuntu 16.04
    archive with `member` naming the file inside. Packages are cached in `downloads/`. The
    download is checked against `sha256` and the extracted file against the exact hash in
-   `mcu3_patch.py`;
+   `mcu2_patch.py`;
 3. for `icu_preload.so`, `egl_pixmap_shim.so` and `cef_nosandbox.so`: compiled from `src/` with
    gcc (the kit refuses a result that needs a glibc newer than the chroot's 2.22).
 
@@ -58,7 +58,7 @@ fake chrome-sandbox is gone since).
 ## Build a fresh image
 
 ```sh
-./tesla build-image --fresh          # new mcu3-new.ext4 from mcu3-original/: copy, kit, maps
+./tesla build-image --fresh          # new mcu2.ext4 from mcu2-original/: copy, kit, maps
 ./tesla build-image                  # after a git pull: apply what's new (only what's missing)
 ./tesla build-image --check          # what an update would change
 ```
@@ -66,30 +66,30 @@ fake chrome-sandbox is gone since).
 By hand, `--fresh` is:
 
 ```sh
-truncate -s 6G mcu3-new.ext4 && mkfs.ext4 -F mcu3-new.ext4
-sudo mkdir -p /mnt/mcu3new && sudo mount -o loop mcu3-new.ext4 /mnt/mcu3new
-sudo cp -a mcu3-original/. /mnt/mcu3new/
-sudo python3 mcu3-patchkit/mcu3_patch.py /mnt/mcu3new
+truncate -s 6G mcu2.ext4 && mkfs.ext4 -F mcu2.ext4
+sudo mkdir -p /mnt/mcu3new && sudo mount -o loop mcu2.ext4 /mnt/mcu3new
+sudo cp -a mcu2-original/. /mnt/mcu3new/
+sudo python3 mcu2-patchkit/mcu2_patch.py /mnt/mcu3new
 sudo umount /mnt/mcu3new
 ```
 
 Another image: `IMAGE=` in `tesla.conf`.
 
-**Kit version**: after a successful run the kit writes `/etc/mcu3-patchkit` into the image
-(`kit=` a hash over `mcu3_patch.py` and `src/`, the git commit, the date, skipped groups).
+**Kit version**: after a successful run the kit writes `/etc/mcu2-patchkit` into the image
+(`kit=` a hash over `mcu2_patch.py` and `src/`, the git commit, the date, skipped groups).
 `./tesla check` compares it with the current kit and says when the image needs
-`./tesla build-image`. Any edit of `mcu3_patch.py` or `src/` changes the version, also a comment.
+`./tesla build-image`. Any edit of `mcu2_patch.py` or `src/` changes the version, also a comment.
 
 ## Usage
 
 ```sh
-python3 mcu3_patch.py --list               # all groups / patches / files
-sudo python3 mcu3_patch.py ROOT --check    # report only, changes nothing (text files: missing / N lines differ)
-sudo python3 mcu3_patch.py ROOT -q         # only what isn't already ok
-python3 mcu3_patch.py --kit-version        # the current kit version
-sudo python3 mcu3_patch.py ROOT            # apply
-sudo python3 mcu3_patch.py ROOT --skip cef --skip sim-no-di-2hz
-sudo python3 mcu3_patch.py ROOT --vin ... --birthday ...
+python3 mcu2_patch.py --list               # all groups / patches / files
+sudo python3 mcu2_patch.py ROOT --check    # report only, changes nothing (text files: missing / N lines differ)
+sudo python3 mcu2_patch.py ROOT -q         # only what isn't already ok
+python3 mcu2_patch.py --kit-version        # the current kit version
+sudo python3 mcu2_patch.py ROOT            # apply
+sudo python3 mcu2_patch.py ROOT --skip cef --skip sim-no-di-2hz
+sudo python3 mcu2_patch.py ROOT --vin ... --birthday ...
 ```
 
 Groups: `core` (needed binary patches), `cef` (browser), `mesa`,
@@ -169,6 +169,6 @@ car configuration changes.
 
 Testing without sudo: a user-owned copy of the rootfs runs in rootless podman:
 `podman run --rm --network host -e QCSVC_NOUSER=1 --rootfs $PWD/sandbox/rootfs qtcar-service qtcar-vehicle`
-(`sandbox/` = `cp -a mcu3-original sandbox/rootfs` + this kit; a few root-only files are skipped by
+(`sandbox/` = `cp -a mcu2-original sandbox/rootfs` + this kit; a few root-only files are skipped by
 the copy, e.g. `/usr/bin/escalator`, so QtCar dies in CEF there after ~20 s; see
 `notes/session4-*.md` for running it under gdb with the browser skipped).

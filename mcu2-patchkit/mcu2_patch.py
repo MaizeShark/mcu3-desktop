@@ -11,11 +11,11 @@ state that runs QtCar in a chroot on a desktop Linux host (see start_all.sh).
   * config / directories / symlinks / startup script / qtcar-service
 
 Usage:
-  sudo python3 mcu3_patch.py /path/to/rootfs              # apply everything
-  sudo python3 mcu3_patch.py /path/to/rootfs --check      # only report status
-  python3 mcu3_patch.py --list                            # list steps and patches
-  sudo python3 mcu3_patch.py ROOT --skip cef --skip identity
-  sudo python3 mcu3_patch.py ROOT --vin 5YJ3... --birthday ...
+  sudo python3 mcu2_patch.py /path/to/rootfs              # apply everything
+  sudo python3 mcu2_patch.py /path/to/rootfs --check      # only report status
+  python3 mcu2_patch.py --list                            # list steps and patches
+  sudo python3 mcu2_patch.py ROOT --skip cef --skip identity
+  sudo python3 mcu2_patch.py ROOT --vin 5YJ3... --birthday ...
 
 Every step is idempotent: already applied things are detected and skipped.
 Patched binaries are backed up as <file>.orig (unless --no-backup).
@@ -350,7 +350,7 @@ TEXT_FILES = [
 # No "model3" sound card on a PC. start_all.sh (AUDIO=1) loads snd-aloop as card "model3"; the
 # car's PCM devices 0 (base amp) and 2 (A2B) become subdevices 0 and 2 of loopback device 0, and
 # start_all.sh plays what AudioWeaver writes there from loopback device 1 on the host.
-ASOUND_MARK = '# --- mcu3-patchkit: sound card on a PC ---'
+ASOUND_MARK = '# --- mcu2-patchkit: sound card on a PC ---'
 ASOUND_BLOCK = ASOUND_MARK + '''
 pcm.!auc {
         @args [ DEVICE CHANNELS ]
@@ -368,13 +368,13 @@ pcm.!auc {
 # "can't set sample rate requested=48000 got=8000", and AWE exits (100). Resample.
 pcm.!awe_in_ecallrx { type plug slave.pcm "awe_tplug8:ecallrx,1" }
 pcm.!awe_out_ecalltx { type plug slave.pcm "awe_tplug8:ecalltx,1" }
-# --- end mcu3-patchkit ---
+# --- end mcu2-patchkit ---
 '''
 
 # AudioWeaver only (qtcar-service sets ALSA_CONFIG_PATH): on the car it runs in a minijail
 # without /dev/snd, its own opens of the sound card fail and audiod owns the PCMs. Here /dev/snd
 # is visible, AWE would take them first and audiod gets EBUSY.
-ASOUND_AWE = '''# mcu3-patchkit: AudioWeaver only (ALSA_CONFIG_PATH in qtcar-service). On the car it runs
+ASOUND_AWE = '''# mcu2-patchkit: AudioWeaver only (ALSA_CONFIG_PATH in qtcar-service). On the car it runs
 # without /dev/snd, so audiod (which feeds it) owns the sound card. Point it at a card that
 # isn't there.
 pcm.!auc {
@@ -436,7 +436,7 @@ class Runner:
     def write_atomic(self, path, data, mode, uid=0, gid=0):
         d = os.path.dirname(path)
         os.makedirs(d, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=d, prefix='.mcu3patch.')
+        fd, tmp = tempfile.mkstemp(dir=d, prefix='.mcu2patch.')
         try:
             with os.fdopen(fd, 'wb') as f:
                 f.write(data)
@@ -693,8 +693,9 @@ class Runner:
         elif self.check:
             self.report('todo', 'etc/asound.conf: sound card block')
         else:
-            if ASOUND_MARK in text:     # an older version of the block: replace it
-                text = text[:text.index(ASOUND_MARK)].rstrip('\n') + '\n'
+            for mark in (ASOUND_MARK, ASOUND_MARK.replace('mcu2-', 'mcu3-')):
+                if mark in text:        # an older version of the block (or the old name): replace it
+                    text = text[:text.index(mark)].rstrip('\n') + '\n'
             self.write_atomic(f, (text.rstrip('\n') + '\n\n' + ASOUND_BLOCK).encode(), 0o644)
             self.report('done', 'etc/asound.conf: sound card block')
         self.text_file('etc/asound-awe.conf', ASOUND_AWE, 0o644)
@@ -877,10 +878,11 @@ def mounts_below(root):
     return found
 
 
-# The image remembers which kit built it (etc/mcu3-patchkit), so `./tesla check` can tell whether
+# The image remembers which kit built it (etc/mcu2-patchkit), so `./tesla check` can tell whether
 # it is up to date without reading every file. The version is a hash over everything in the kit
 # that ends up in the image: this script (which pins all payload hashes) and src/.
-STAMP = 'etc/mcu3-patchkit'
+STAMP = 'etc/mcu2-patchkit'
+OLD_STAMP = 'etc/mcu3-patchkit'   # kits before 2026-09-25 (the unit was called MCU3 by mistake)
 
 
 def kit_version():
@@ -905,7 +907,10 @@ def git_describe():
 def read_stamp(root):
     """The stamp as a dict (kit, commit, date, skipped), or {} if there is none."""
     try:
-        with open(os.path.join(root, STAMP)) as f:
+        path = os.path.join(root, STAMP)
+        if not os.path.exists(path):
+            path = os.path.join(root, OLD_STAMP)
+        with open(path) as f:
             return dict(line.rstrip('\n').split('=', 1) for line in f if '=' in line)
     except OSError:
         return {}
@@ -950,7 +955,7 @@ def list_all():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('root', nargs='?', help='root of the MCU rootfs (e.g. the mounted mcu3.ext4)')
+    ap.add_argument('root', nargs='?', help='root of the MCU rootfs (e.g. the mounted mcu2.ext4)')
     ap.add_argument('--check', action='store_true', help='only report what is applied / missing')
     ap.add_argument('--list', action='store_true', help='list all groups, patches and files')
     ap.add_argument('--skip', action='append', default=[], metavar='GROUP|ID',
@@ -1016,6 +1021,8 @@ def main():
                 f'date={datetime.datetime.now().isoformat(timespec="seconds")}\n'
                 f'skipped={",".join(args.skip)}\n')
         r.write_atomic(r.p(STAMP), text.encode(), 0o644)
+        if os.path.exists(r.p(OLD_STAMP)):
+            os.unlink(r.p(OLD_STAMP))
         print(f'Kit version {version} written to /{STAMP}')
     return 1 if c['error'] else 0
 
