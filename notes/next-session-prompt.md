@@ -30,8 +30,8 @@ B. Arcade controls: BBR2 is played with the steering wheel and pedals on the car
    gamepad). Also place the game windows at QtCar's TIDK window (Xfce decorates them).
 
 Open, roughly in order (ask before large restructurings):
-1. Bluetooth: does selecting "Phone" in QtCar's Media app switch audiod to source 3 (A2DP) by
-   itself? Calls (hands-free audio, microphone). The A2DP connect race (sometimes a second try).
+1. Bluetooth: music works ("Phone" in the Media app switches audiod to source 3 by itself,
+   confirmed). Calls: dialing works, the call audio (hands-free, microphone) is untested. The A2DP connect race (sometimes a second try).
    A USB power cycle was needed once to revive the AX210; watch whether the vendor-command filter
    and the reset on exit keep it away.
 2. The patch kit: remove the patches that do nothing (gui-escalator-*, gui-cgroup-exit-*, the
