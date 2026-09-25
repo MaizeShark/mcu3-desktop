@@ -17,13 +17,15 @@ Current state:
   reboot it). Its copy: ~/mcu3-desktop (repo files via rsync of `git ls-files`, the image copied
   with zstd). A rooted Pixel 7a ("Pixel 7a 2") is on this PC's adb, paired with the laptop's "Tesla".
 
-Done late in session 6: contacts in the phone app (QtCarBluetooth's HOME), the arcade starts
-(mame classics and Beach Buggy Racing 2 through qtcar-service jobs; BBR2 menus work).
+Done late in session 6: contacts in the phone app (QtCarBluetooth's HOME). The arcade is only
+started: qtcar-service jobs mame/cobalt/cobalt-input launch Asteroids and Beach Buggy Racing 2 in
+a window, but neither game really works yet (see the session 6 notes, "Arcade").
 
 The user's wishes for next time:
 A. All CAN signals in the web panel (vehicle/panel.html, tesla-can.py): browse/search every
    message and signal of the CAN database (379 messages, 8759 signals), set and watch them.
-B. Arcade controls: BBR2 is played with the steering wheel and pedals on the car.
+B. Make the arcade work (a new session): find out what's wrong with each game (input, window,
+   sound, ...). BBR2 is played with the steering wheel and pedals on the car.
    input_to_virtual (libTeslaDevices: DeviceDriverScrollWheel, a steering driver) creates
    "game-steering", "game-scroll-left/right" (missing here, only "game-touch"); find their source
    (probably CAN: steering angle, scroll wheels, pedals) and feed it (panel sliders, keyboard,
