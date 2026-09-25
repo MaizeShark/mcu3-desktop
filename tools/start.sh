@@ -543,6 +543,8 @@ start_screen_native() {
     [ -n "$NATIVE_OUT" ] || die "no connected output on $NATIVE_DISPLAY (xrandr)"
     pw=${PANEL%x*} ph=${PANEL#*x}
     echo "NATIVE=$NATIVE_DISPLAY" >>"$LOG_DIR/state"
+    # the udev rule (tesla-touch/99-tesla-touch.rules) leaves QtCar's tesla-uinput to this X server
+    sudo touch /run/tesla-native
     if [ "$PANEL" != "$SIZE" ]; then
         tf=$(python3 -c "
 uw, uh, pw, ph = $ui_w, $ui_h, $pw, $ph

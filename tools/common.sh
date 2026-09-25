@@ -212,6 +212,7 @@ teardown() {
         case "$f" in /dev/dri/*) sudo setfacl -x u:1226 "$f"; sudo setfacl -x u:1980 "$f" ;; esac 2>/dev/null
     done
     if [ -n "$native_display" ]; then
+        sudo rm -f /run/tesla-native
         DISPLAY=$native_display xset s default +dpms 2>/dev/null
         local restore
         restore=$(sed -n 's/^NATIVE_RESTORE=//p' "$dir/state" 2>/dev/null)

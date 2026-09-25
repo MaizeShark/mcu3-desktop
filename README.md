@@ -20,7 +20,7 @@ music stick, a backup camera from any V4L2 source, and offline navigation.
 - **Only firmware 2019.20.4.2 (x86_64)** was ever tested and used. The patch kit checks every
   file it patches and refuses other versions.
 - **Made with an LLM.** Sessions 1 and 2 (May 2026) were done with Claude Sonnet, all later ones
-  with Claude Opus 5 & 5.5 (about 4.5M Token), guided and tested by a human. The session notes in [`notes/`](notes/)
+  with Claude Opus 5 & 5.5 (about 6.5M tokens), guided and tested by a human. The session notes in [`notes/`](notes/)
   show how.
 - **Demonstration Video** [Youtube Video](https://youtu.be/45vGXZr9VNI)
 

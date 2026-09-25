@@ -33,7 +33,8 @@ Always on: the Web app is Tesla's Chromium Embedded Framework build (Chrome 73).
   delivers them to the browser's (invisible) window, as on the car. With `--native` the preloaded
   `egl_pixmap_shim.so` keeps that window away from the desktop's window manager (on top, opacity
   0, no focus). Over VNC, Xvfb doesn't read that touchscreen: the shim sends taps as clicks and
-  drags as wheel steps instead.
+  drags as wheel steps instead, and the udev rule keeps the desktop from taking it (else the
+  desktop's pointer jumped with every touch in the browser).
 - Limits: an old browser; pages that need a newer one fail. Pages that create a WebAudio
   oscillator lose that feature. Over VNC there are no multi-touch gestures (pinch zoom).
 

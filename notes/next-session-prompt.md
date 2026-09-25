@@ -14,7 +14,7 @@ Current state:
   clock for 250 Hz kernels (snd-dummy "hrclock" as snd-aloop's timer_source), the webcam cropped
   to 4:3, the PulseAudio/PipeWire udev rule (tools/99-tesla-sound.rules).
 - Test laptop: ThinkPad T480 (touchscreen, Intel AX210) with a Debian 13 live system in RAM,
-  `ssh user@192.168.200.40` (passwordless sudo; everything there is gone after its reboot; don't
+  `ssh user@<laptop>` (address in the user's own notes) (passwordless sudo; everything there is gone after its reboot; don't
   reboot it). Its copy: ~/mcu3-desktop (repo files via rsync of `git ls-files`, the image copied
   with zstd). A rooted Pixel 7a ("Pixel 7a 2") is on this PC's adb, paired with the laptop's "Tesla".
 
@@ -40,17 +40,6 @@ Open, roughly in order (ask before large restructurings):
    from the user's own dump, booting straight into `./tesla start --native` (never distributable:
    it contains the firmware).
 5. Remaining audio dropouts in games follow the laptop's heat (session 7 notes).
-6. Later (the user wants to try it once the hardware works): a "car network" mode for a real
-   Autopilot computer (HW2.5) on the PC's Ethernet, bench only. What's known: the car network is
-   192.168.90.x, MCU .100, IC .101, gateway .102, AP/"ape" .103, "ape-b" .105, LB .104
-   (/etc/hosts, /etc/RunQtCar.vars: QCSUBNET, QCGW, QCAP, ...); the services normally get
-   --gw/--ip/... and use multicast 224.0.0.26, which qtcar-service strips for loopback; so the
-   mode would put a dedicated NIC (or a netns) on 192.168.90.100 and keep those options.
-   GpsManager knows LOC_adas* (a position from the Autopilot side) besides its own receiver:
-   with the APE connected, tesla-gps.py would stay off (and maybe parts of tesla-can.py). To find
-   out: what the APE sends to the MCU (UDP ports, e.g. with can-sniff.py/tcpdump on that NIC),
-   what it needs to run on the bench (12 V, its CAN buses, the gateway's messages), and how the
-   MCU services pick the APE's data up. Never on a car that drives.
 
 How to work: test in the sandbox or on the laptop first; the user runs sudo commands on this PC.
 Commit often, push to origin (the user's Forgejo); push to `github` only when asked, after

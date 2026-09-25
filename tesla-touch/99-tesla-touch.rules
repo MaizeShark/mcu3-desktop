@@ -6,6 +6,11 @@
 #
 # Install:  sudo cp 99-tesla-touch.rules /etc/udev/rules.d/ && sudo udevadm control --reload
 SUBSYSTEM=="input", ATTRS{name}=="cyttsp6_mt", ENV{LIBINPUT_IGNORE_DEVICE}="1", ENV{ID_INPUT}="", ENV{ID_INPUT_TOUCHSCREEN}="", MODE="0666"
+# QtCar's own virtual touchscreen "tesla-uinput" (it replays touches in the browser there, for the
+# X server to deliver to the browser's window). Over VNC the desktop took it and every touch in
+# the browser moved the desktop's pointer. With ./tesla start --native the desktop's X server is
+# QtCar's and needs it: that start creates /run/tesla-native.
+SUBSYSTEM=="input", ATTRS{name}=="tesla-uinput", TEST!="/run/tesla-native", ENV{LIBINPUT_IGNORE_DEVICE}="1", ENV{ID_INPUT}="", ENV{ID_INPUT_TOUCHSCREEN}=""
 # The arcade's virtual devices (game-touch, game-steering, game-scroll-left/right; made in the
 # chroot while a game runs) are the game's alone, too.
 SUBSYSTEM=="input", ATTRS{name}=="game-*", ENV{LIBINPUT_IGNORE_DEVICE}="1", ENV{ID_INPUT}="", ENV{ID_INPUT_TOUCHSCREEN}="", ENV{ID_INPUT_JOYSTICK}=""

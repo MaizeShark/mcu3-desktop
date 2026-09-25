@@ -13,4 +13,5 @@ earlier ones where they disagree.
 | `session5-2026-09-23.md` | telltales, presets and the web panel, per-user service homes, real GPS receivers, UI buttons, audio (AudioWeaver/audiod on snd-aloop), backup camera, videos, USB music, Spotify/TuneIn dead ends |
 | `session6-2026-09-24.md` | the `./tesla` command (start/stop/status/check/logs/build-image, tesla.conf), kit version stamp, panel services, docs |
 | `session7-2026-09-25.md` | all CAN signals on the panel; the arcade (BBR2 and MAME): input devices, GPU, window manager, focus, sv verbs |
+| `ideas.md` | ideas that aren't planned yet (a real HW2.5 Autopilot computer on the PC's Ethernet) |
 | `next-session-prompt.md` | the prompt for the next session |
